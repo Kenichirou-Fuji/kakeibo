@@ -43,6 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
       date: document.getElementById('date').value,
       amount: parseInt(document.getElementById('amount').value, 10),
       category: document.getElementById('category').value,
+      purpose: document.getElementById('purpose').value,
+      wallet: document.getElementById('wallet').value,
       memo: document.getElementById('memo').value.trim(),
     };
     const entries = loadEntries();
@@ -52,6 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
     e.target.reset();
     document.getElementById('date').value = today();
     document.getElementById('category').value = '';
+    document.getElementById('purpose').value = 'personal';
+    document.getElementById('wallet').value = 'personal';
   });
 
   // モーダル外クリックで閉じる
@@ -65,10 +69,14 @@ function renderList() {
   const entries = loadEntries();
   const catFilter = document.getElementById('filterCategory').value;
   const monthFilter = document.getElementById('filterMonth').value;
+  const purposeFilter = document.getElementById('filterPurpose').value;
+  const walletFilter = document.getElementById('filterWallet').value;
 
   let filtered = entries.filter(e => {
     if (catFilter && e.category !== catFilter) return false;
     if (monthFilter && !e.date.startsWith(monthFilter)) return false;
+    if (purposeFilter && e.purpose !== purposeFilter) return false;
+    if (walletFilter && e.wallet !== walletFilter) return false;
     return true;
   });
 
@@ -86,6 +94,8 @@ function renderList() {
       <tr>
         <td>${formatDate(e.date)}</td>
         <td><span class="badge badge-${e.category}">${e.category}</span></td>
+        <td><span class="badge badge-${e.purpose || 'personal'}">${e.purpose === 'family' ? '家族' : '私用'}</span></td>
+        <td><span class="badge badge-${e.wallet || 'personal'}">${e.wallet === 'family' ? '家族用' : '私用'}</span></td>
         <td class="amount-cell">¥${e.amount.toLocaleString()}</td>
         <td style="color:#718096">${e.memo || '—'}</td>
         <td>
@@ -132,6 +142,8 @@ function openEdit(id) {
   document.getElementById('editDate').value = entry.date;
   document.getElementById('editAmount').value = entry.amount;
   document.getElementById('editCategory').value = entry.category;
+  document.getElementById('editPurpose').value = entry.purpose || 'personal';
+  document.getElementById('editWallet').value = entry.wallet || 'personal';
   document.getElementById('editMemo').value = entry.memo;
   document.getElementById('editModal').classList.add('open');
 }
@@ -146,11 +158,13 @@ function saveEdit() {
   const date = document.getElementById('editDate').value;
   const amount = parseInt(document.getElementById('editAmount').value, 10);
   const category = document.getElementById('editCategory').value;
+  const purpose = document.getElementById('editPurpose').value;
+  const wallet = document.getElementById('editWallet').value;
   const memo = document.getElementById('editMemo').value.trim();
   if (!date || isNaN(amount)) { alert('日付と金額は必須です'); return; }
 
   const entries = loadEntries().map(e =>
-    e.id === editingId ? { ...e, date, amount, category, memo } : e
+    e.id === editingId ? { ...e, date, amount, category, purpose, wallet, memo } : e
   );
   saveEntries(entries);
   closeModal();

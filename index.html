@@ -29,7 +29,7 @@
           <label for="amount">💴 金額（円）</label>
           <input type="number" id="amount" placeholder="1000" min="0" required />
         </div>
-        <div class="form-group">
+       <div class="form-group">
           <label for="category">🏷️ カテゴリ</label>
           <select id="category" required>
             <option value="">選択してください</option>
@@ -40,6 +40,20 @@
             <option>医療費</option>
             <option>日用品</option>
             <option>その他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="purpose">👤 用途</label>
+          <select id="purpose" required>
+            <option value="personal">私用</option>
+            <option value="family">家族用</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="wallet">💳 財布</label>
+          <select id="wallet" required>
+            <option value="personal">私用</option>
+            <option value="family">家族用</option>
           </select>
         </div>
         <div class="form-group">
@@ -80,20 +94,32 @@
       <option>日用品</option>
       <option>その他</option>
     </select>
+    <select id="filterPurpose" onchange="renderList()">
+      <option value="">すべての用途</option>
+      <option value="personal">私用</option>
+      <option value="family">家族用</option>
+    </select>
+    <select id="filterWallet" onchange="renderList()">
+      <option value="">すべての財布</option>
+      <option value="personal">私用</option>
+      <option value="family">家族用</option>
+    </select>
     <input type="month" id="filterMonth" onchange="renderList()" />
   </div>
 
   <div class="list-card">
     <table>
       <thead>
-        <tr>
+         <tr>
           <th>日付</th>
           <th>カテゴリ</th>
+          <th>用途</th>
+          <th>財布</th>
           <th>金額</th>
           <th>メモ</th>
           <th></th>
-        </tr>
-      </thead>
+         </tr>
+       </thead>
       <tbody id="entryList"></tbody>
     </table>
     <div id="emptyState" class="empty-state" style="display:none;">データがありません</div>
@@ -123,6 +149,20 @@
           <option>医療費</option>
           <option>日用品</option>
           <option>その他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>用途</label>
+        <select id="editPurpose">
+          <option value="personal">私用</option>
+          <option value="family">家族用</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>財布</label>
+        <select id="editWallet">
+          <option value="personal">私用</option>
+          <option value="family">家族用</option>
         </select>
       </div>
       <div class="form-group">
