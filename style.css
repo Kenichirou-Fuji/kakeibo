@@ -206,13 +206,7 @@ td { padding: 0.85rem 1rem; }
   font-weight: 600;
 }
 
-.badge-食費    { background: #fef3c7; color: #92400e; }
-.badge-交通費  { background: #dbeafe; color: #1e40af; }
-.badge-光熱費  { background: #fce7f3; color: #9d174d; }
-.badge-娯楽費  { background: #d1fae5; color: #065f46; }
-.badge-医療費  { background: #ede9fe; color: #5b21b6; }
-.badge-日用品  { background: #e0e7ff; color: #3730a3; }
-.badge-その他  { background: #f1f5f9; color: #475569; }
+
 
 .amount-cell { font-weight: 700; color: #e53e3e; }
 

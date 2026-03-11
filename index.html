@@ -29,31 +29,18 @@
           <label for="amount">💴 金額（円）</label>
           <input type="number" id="amount" placeholder="1000" min="0" required />
         </div>
-       <div class="form-group">
-          <label for="category">🏷️ カテゴリ</label>
-          <select id="category" required>
-            <option value="">選択してください</option>
-            <option>食費</option>
-            <option>交通費</option>
-            <option>光熱費</option>
-            <option>娯楽費</option>
-            <option>医療費</option>
-            <option>日用品</option>
-            <option>その他</option>
-          </select>
-        </div>
         <div class="form-group">
-          <label for="purpose">👤 用途</label>
+          <label for="purpose">👤 用途（誰が使うか）</label>
           <select id="purpose" required>
-            <option value="personal">私用</option>
+            <option value="personal">個人用</option>
             <option value="family">家族用</option>
           </select>
         </div>
         <div class="form-group">
-          <label for="wallet">💳 財布</label>
+          <label for="wallet">💳 財布（どの財布から）</label>
           <select id="wallet" required>
-            <option value="personal">私用</option>
-            <option value="family">家族用</option>
+            <option value="personal">私の財布</option>
+            <option value="family">共有財布</option>
           </select>
         </div>
         <div class="form-group">
@@ -83,26 +70,15 @@
     </div>
   </div>
 
-  <div class="filters">
-    <select id="filterCategory" onchange="renderList()">
-      <option value="">すべてのカテゴリ</option>
-      <option>食費</option>
-      <option>交通費</option>
-      <option>光熱費</option>
-      <option>娯楽費</option>
-      <option>医療費</option>
-      <option>日用品</option>
-      <option>その他</option>
-    </select>
-    <select id="filterPurpose" onchange="renderList()">
+  <div class="filters"><select id="filterPurpose" onchange="renderList()">
       <option value="">すべての用途</option>
-      <option value="personal">私用</option>
+      <option value="personal">個人用</option>
       <option value="family">家族用</option>
     </select>
     <select id="filterWallet" onchange="renderList()">
       <option value="">すべての財布</option>
-      <option value="personal">私用</option>
-      <option value="family">家族用</option>
+      <option value="personal">私の財布</option>
+      <option value="family">共有財布</option>
     </select>
     <input type="month" id="filterMonth" onchange="renderList()" />
   </div>
@@ -112,7 +88,6 @@
       <thead>
          <tr>
           <th>日付</th>
-          <th>カテゴリ</th>
           <th>用途</th>
           <th>財布</th>
           <th>金額</th>
@@ -140,29 +115,17 @@
         <input type="number" id="editAmount" min="0" required />
       </div>
       <div class="form-group">
-        <label>カテゴリ</label>
-        <select id="editCategory">
-          <option>食費</option>
-          <option>交通費</option>
-          <option>光熱費</option>
-          <option>娯楽費</option>
-          <option>医療費</option>
-          <option>日用品</option>
-          <option>その他</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>用途</label>
+        <label>用途（誰が使うか）</label>
         <select id="editPurpose">
-          <option value="personal">私用</option>
+          <option value="personal">個人用</option>
           <option value="family">家族用</option>
         </select>
       </div>
       <div class="form-group">
-        <label>財布</label>
+        <label>財布（どの財布から）</label>
         <select id="editWallet">
-          <option value="personal">私用</option>
-          <option value="family">家族用</option>
+          <option value="personal">私の財布</option>
+          <option value="family">共有財布</option>
         </select>
       </div>
       <div class="form-group">
