@@ -79,13 +79,17 @@ function renderList() {
   filtered.sort((a, b) => b.date.localeCompare(a.date));
 
   const tbody = document.getElementById('entryList');
+  const mobileList = document.getElementById('mobileList');
   const empty = document.getElementById('emptyState');
 
   if (filtered.length === 0) {
     tbody.innerHTML = '';
+    mobileList.innerHTML = '';
     empty.style.display = '';
   } else {
     empty.style.display = 'none';
+    
+    // デスクトップ表示
     tbody.innerHTML = filtered.map(e => `
       <tr>
         <td>${formatDate(e.date)}</td>
@@ -101,6 +105,36 @@ function renderList() {
         </td>
       </tr>
     `).join('');
+
+    // モバイル表示
+    mobileList.innerHTML = filtered.map(e => `
+      <div class="mobile-card" data-id="${e.id}">
+        <div class="card-content">
+          <div class="card-row">
+            <div>
+              <div class="card-label">日付</div>
+              <div class="card-value">${formatDate(e.date)}</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="card-label">金額</div>
+              <div class="card-amount">¥${e.amount.toLocaleString()}</div>
+            </div>
+          </div>
+          <div class="card-row">
+            <span class="card-badge badge-${e.purpose || 'personal'}">${e.purpose === 'family' ? '家族用' : '個人用'}</span>
+            <span class="card-badge badge-${e.wallet || 'personal'}">${e.wallet === 'family' ? '共有財布' : '私の財布'}</span>
+          </div>
+          ${e.memo ? `<div class="card-row" style="color: #718096; font-size: 0.85rem;">💬 ${e.memo}</div>` : ''}
+        </div>
+        <div class="card-actions">
+          <button class="card-btn-edit" onclick="openEdit('${e.id}')">✏️ 編集</button>
+          <button class="card-btn-del" onclick="deleteEntry('${e.id}')">🗑️ 削除</button>
+        </div>
+      </div>
+    `).join('');
+
+    // スワイプ機能を初期化
+    initSwipe();
   }
 
   // サマリー更新
@@ -172,4 +206,49 @@ function showToast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── スワイプ機能 ──
+function initSwipe() {
+  const cards = document.querySelectorAll('.mobile-card');
+  cards.forEach(card => {
+    let startX = 0;
+    let startTime = 0;
+    const cardContent = card.querySelector('.card-content');
+
+    card.addEventListener('touchstart', (e) => {
+      startX = e.touches[0].clientX;
+      startTime = Date.now();
+      card.classList.remove('swiped');
+    }, false);
+
+    card.addEventListener('touchmove', (e) => {
+      const currentX = e.touches[0].clientX;
+      const diff = startX - currentX;
+      
+      if (diff > 0 && diff < 80) {
+        cardContent.style.transform = `translateX(-${diff}px)`;
+      }
+    }, false);
+
+    card.addEventListener('touchend', (e) => {
+      const endX = e.changedTouches[0].clientX;
+      const diff = startX - endX;
+      const duration = Date.now() - startTime;
+
+      if ((diff > 30 && duration < 500) || diff > 40) {
+        card.classList.add('swiped');
+      } else {
+        cardContent.style.transform = 'translateX(0)';
+      }
+    }, false);
+
+    // タップでスワイプ状態をリセット
+    cardContent.addEventListener('click', (e) => {
+      if (!e.target.closest('button')) {
+        card.classList.remove('swiped');
+        cardContent.style.transform = 'translateX(0)';
+      }
+    });
+  });
 }

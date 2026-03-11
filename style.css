@@ -233,7 +233,112 @@ td { padding: 0.85rem 1rem; }
   font-size: 1rem;
 }
 
-/* ── モーダル ── */
+/* ── モバイルカード表示 ── */
+.mobile-list { display: none; }
+
+@media (max-width: 520px) {
+  #desktopTable { display: none; }
+  .mobile-list { display: block; }
+
+  .mobile-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .card-content {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: transform 0.3s ease;
+    transform: translateX(0);
+    position: relative;
+    z-index: 1;
+    background: white;
+  }
+
+  .card-content.swiped {
+    transform: translateX(-80px);
+  }
+
+  .card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+
+  .card-label {
+    color: #718096;
+    font-weight: 600;
+    font-size: 0.75rem;
+  }
+
+  .card-value {
+    color: #2d3748;
+    font-weight: 500;
+  }
+
+  .card-amount {
+    color: #e53e3e;
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .card-badge {
+    display: inline-block;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-right: 0.3rem;
+  }
+
+  .card-actions {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    display: flex;
+    background: #fff5f5;
+    z-index: 0;
+  }
+
+  .card-actions button {
+    padding: 0 1rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    transition: background 0.15s;
+  }
+
+  .card-btn-edit {
+    color: #2b6cb0;
+    padding: 0 0.8rem;
+  }
+
+  .card-btn-edit:active {
+    background: rgba(43, 108, 176, 0.1);
+  }
+
+  .card-btn-del {
+    color: #c53030;
+    padding: 0 0.8rem;
+  }
+
+  .card-btn-del:active {
+    background: rgba(197, 48, 48, 0.15);
+  }
+}
 .modal-overlay {
   display: none;
   position: fixed;
@@ -297,5 +402,4 @@ td { padding: 0.85rem 1rem; }
 @media (max-width: 520px) {
   .form-grid { grid-template-columns: 1fr; }
   .form-group.full { grid-column: 1; }
-  thead th:nth-child(4), td:nth-child(4) { display: none; }
 }
