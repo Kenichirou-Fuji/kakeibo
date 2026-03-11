@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>家計簿アプリ</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>💰 家計簿アプリ</header>
+
+<nav>
+  <button class="active" onclick="switchTab('register')">📝 登録</button>
+  <button onclick="switchTab('view')">📋 閲覧</button>
+</nav>
+
+<!-- ── 登録画面 ── -->
+<div id="page-register" class="page active">
+  <div class="card">
+    <h2>支出を登録する</h2>
+    <form id="registerForm">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="date">📅 日付</label>
+          <input type="date" id="date" required />
+        </div>
+        <div class="form-group">
+          <label for="amount">💴 金額（円）</label>
+          <input type="number" id="amount" placeholder="1000" min="0" required />
+        </div>
+        <div class="form-group">
+          <label for="category">🏷️ カテゴリ</label>
+          <select id="category" required>
+            <option value="">選択してください</option>
+            <option>食費</option>
+            <option>交通費</option>
+            <option>光熱費</option>
+            <option>娯楽費</option>
+            <option>医療費</option>
+            <option>日用品</option>
+            <option>その他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="memo">📝 メモ</label>
+          <input type="text" id="memo" placeholder="例：スーパーでの買い物" />
+        </div>
+      </div>
+      <button type="submit" class="btn-primary">＋ 登録する</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── 閲覧画面 ── -->
+<div id="page-view" class="page">
+  <div class="summary">
+    <div class="summary-box">
+      <div class="label">今月の合計</div>
+      <div class="amount" id="monthTotal">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label">全期間の合計</div>
+      <div class="amount" id="allTotal">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label">登録件数</div>
+      <div class="amount" id="totalCount">0件</div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <select id="filterCategory" onchange="renderList()">
+      <option value="">すべてのカテゴリ</option>
+      <option>食費</option>
+      <option>交通費</option>
+      <option>光熱費</option>
+      <option>娯楽費</option>
+      <option>医療費</option>
+      <option>日用品</option>
+      <option>その他</option>
+    </select>
+    <input type="month" id="filterMonth" onchange="renderList()" />
+  </div>
+
+  <div class="list-card">
+    <table>
+      <thead>
+        <tr>
+          <th>日付</th>
+          <th>カテゴリ</th>
+          <th>金額</th>
+          <th>メモ</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="entryList"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">データがありません</div>
+  </div>
+</div>
+
+<!-- ── 編集モーダル ── -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h2>✏️ 編集する</h2>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>日付</label>
+        <input type="date" id="editDate" required />
+      </div>
+      <div class="form-group">
+        <label>金額（円）</label>
+        <input type="number" id="editAmount" min="0" required />
+      </div>
+      <div class="form-group">
+        <label>カテゴリ</label>
+        <select id="editCategory">
+          <option>食費</option>
+          <option>交通費</option>
+          <option>光熱費</option>
+          <option>娯楽費</option>
+          <option>医療費</option>
+          <option>日用品</option>
+          <option>その他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>メモ</label>
+        <input type="text" id="editMemo" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="btn-save" onclick="saveEdit()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
