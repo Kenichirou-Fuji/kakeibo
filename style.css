@@ -163,6 +163,22 @@ textarea { resize: vertical; min-height: 80px; }
 .filters select, .filters input {
   flex: 1;
   min-width: 120px;
+  background: white;
+  color: #2d3748;
+}
+
+.filters select option {
+  background: white;
+  color: #2d3748;
+}
+
+.filters input[type="month"] {
+  background: white;
+  color: #2d3748;
+}
+
+.filters input[type="month"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
 }
 
 .list-card {
@@ -206,7 +222,15 @@ td { padding: 0.85rem 1rem; }
   font-weight: 600;
 }
 
+.badge-personal {
+  background: #ebf4ff;
+  color: #2b6cb0;
+}
 
+.badge-family {
+  background: #fef3c7;
+  color: #92400e;
+}
 
 .amount-cell { font-weight: 700; color: #e53e3e; }
 
