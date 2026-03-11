@@ -26,11 +26,11 @@ function currentMonth() {
 }
 
 // ── タブ切り替え ──
-function switchTab(tab) {
+function switchTab(tab, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + tab).classList.add('active');
-  event.currentTarget.classList.add('active');
+  btn.classList.add('active');
   if (tab === 'view') renderList();
 }
 
