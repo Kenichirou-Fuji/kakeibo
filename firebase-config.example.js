@@ -19,12 +19,3 @@ const firebaseConfig = {
   messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
   appId:             "YOUR_APP_ID"
 };
-
-firebase.initializeApp(firebaseConfig);
-
-const db = firebase.firestore();
-
-// オフライン永続化（ネット接続が切れても操作でき、復帰後に自動同期）
-db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-  console.warn('オフライン永続化を有効にできませんでした:', err.code);
-});

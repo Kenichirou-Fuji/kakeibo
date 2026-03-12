@@ -181,6 +181,123 @@ textarea { resize: vertical; min-height: 80px; }
   filter: invert(0.8);
 }
 
+.deposit-form-grid {
+  margin-bottom: 1rem;
+}
+
+.deposit-description {
+  color: #718096;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.deposit-summary {
+  margin-top: 1.5rem;
+}
+
+.deposit-plus {
+  color: #2b6cb0 !important;
+}
+
+.deposit-minus {
+  color: #c53030 !important;
+}
+
+.deposit-result-box {
+  border: 2px solid #c3dafe;
+}
+
+.deposit-card {
+  padding: 1.25rem;
+}
+
+.deposit-formula {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #4a5568;
+  margin-bottom: 0.65rem;
+}
+
+.deposit-status {
+  color: #718096;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.deposit-breakdown {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.deposit-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.9rem 1rem;
+  background: #f7fafc;
+  border-radius: 10px;
+}
+
+.deposit-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.deposit-detail-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.deposit-detail-section h3 {
+  font-size: 0.95rem;
+  color: #4a5568;
+  background: #f7fafc;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.deposit-detail-list {
+  min-height: 88px;
+}
+
+.deposit-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-top: 1px solid #edf2f7;
+}
+
+.deposit-item:first-child {
+  border-top: none;
+}
+
+.deposit-item-date {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #718096;
+  margin-bottom: 0.2rem;
+}
+
+.deposit-item-memo {
+  color: #4a5568;
+}
+
+.deposit-item-amount {
+  font-weight: 700;
+  color: #2d3748;
+  white-space: nowrap;
+}
+
+.deposit-empty {
+  padding: 1rem;
+  color: #a0aec0;
+}
+
 .list-card {
   background: white;
   border-radius: 12px;
@@ -428,4 +545,10 @@ td { padding: 0.85rem 1rem; }
 @media (max-width: 520px) {
   .form-grid { grid-template-columns: 1fr; }
   .form-group.full { grid-column: 1; }
+  .deposit-detail-grid { grid-template-columns: 1fr; }
+  .deposit-breakdown-row,
+  .deposit-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

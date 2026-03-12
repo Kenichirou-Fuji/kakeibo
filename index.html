@@ -13,6 +13,7 @@
 <nav>
   <button class="active" onclick="switchTab('register', this)">📝 登録</button>
   <button onclick="switchTab('view', this)">📋 閲覧</button>
+  <button onclick="switchTab('deposit', this)">🏦 入金額</button>
 </nav>
 
 <!-- ── 登録画面 ── -->
@@ -50,6 +51,74 @@
       </div>
       <button type="submit" class="btn-primary">＋ 登録する</button>
     </form>
+  </div>
+</div>
+
+<!-- ── 入金額計算画面 ── -->
+<div id="page-deposit" class="page">
+  <div class="card">
+    <h2>毎月の入金額を計算する</h2>
+    <div class="form-grid deposit-form-grid">
+      <div class="form-group">
+        <label for="depositMonth">📅 対象月</label>
+        <input type="month" id="depositMonth" />
+      </div>
+      <div class="form-group">
+        <label for="baseDepositAmount">💴 基本入金額（円）</label>
+        <input type="number" id="baseDepositAmount" min="0" step="1000" placeholder="180000" />
+      </div>
+    </div>
+    <p class="deposit-description">
+      計算式: 基本入金額 ＋ 共有財布で払った個人用 － 私の財布で払った家族用
+    </p>
+  </div>
+
+  <div class="summary deposit-summary">
+    <div class="summary-box">
+      <div class="label">基本入金額</div>
+      <div class="amount" id="depositBaseTotal">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label">共有財布で払った個人用</div>
+      <div class="amount deposit-plus" id="depositFamilyPersonal">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label">私の財布で払った家族用</div>
+      <div class="amount deposit-minus" id="depositPersonalFamily">¥0</div>
+    </div>
+    <div class="summary-box deposit-result-box">
+      <div class="label">今月の入金額</div>
+      <div class="amount" id="depositRecommendedTotal">¥0</div>
+    </div>
+  </div>
+
+  <div class="list-card deposit-card">
+    <div class="deposit-formula" id="depositFormula">¥0 + ¥0 - ¥0 = ¥0</div>
+    <div class="deposit-status" id="depositStatus"></div>
+    <div class="deposit-breakdown">
+      <div class="deposit-breakdown-row">
+        <span>共有財布 → 個人用 の件数</span>
+        <strong id="familyPersonalCount">0件</strong>
+      </div>
+      <div class="deposit-breakdown-row">
+        <span>私の財布 → 家族用 の件数</span>
+        <strong id="personalFamilyCount">0件</strong>
+      </div>
+      <div class="deposit-breakdown-row">
+        <span>対象月の登録件数</span>
+        <strong id="depositMonthEntryCount">0件</strong>
+      </div>
+    </div>
+    <div class="deposit-detail-grid">
+      <section class="deposit-detail-section">
+        <h3>共有財布で払った個人用</h3>
+        <div id="depositFamilyPersonalList" class="deposit-detail-list"></div>
+      </section>
+      <section class="deposit-detail-section">
+        <h3>私の財布で払った家族用</h3>
+        <div id="depositPersonalFamilyList" class="deposit-detail-list"></div>
+      </section>
+    </div>
   </div>
 </div>
 
@@ -146,6 +215,7 @@
 <!-- Firebase SDK (compat版) -->
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>

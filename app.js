@@ -1,5 +1,24 @@
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.firestore();
+
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+  console.warn('オフライン永続化を有効にできませんでした:', err.code);
+});
+
+firebase.auth().signInAnonymously()
+  .then(() => {
+    console.log("Firebase Auth: 匿名ログインに成功しました");
+  })
+  .catch((error) => {
+    console.error("Firebase Auth Error:", error);
+    showToast("⚠️ ログインに失敗しました");
+  });
+
 let editingId = null;
 let cachedEntries = [];
+const DEFAULT_BASE_DEPOSIT_AMOUNT = 180000;
+const BASE_DEPOSIT_STORAGE_KEY = 'baseDepositAmount';
 
 // ── Firestore リアルタイム同期 ──
 // データが変わると全デバイスで自動的に renderList() が呼ばれる
@@ -7,6 +26,7 @@ db.collection('entries').onSnapshot(
   snapshot => {
     cachedEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     renderList();
+    renderDeposit();
   },
   err => {
     console.error('Firestore 同期エラー:', err);
@@ -18,14 +38,30 @@ db.collection('entries').onSnapshot(
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('date').value = today();
   document.getElementById('filterMonth').value = currentMonth();
+  document.getElementById('depositMonth').value = currentMonth();
+  document.getElementById('baseDepositAmount').value = loadBaseDepositAmount();
+  document.getElementById('depositMonth').addEventListener('change', renderDeposit);
+  document.getElementById('baseDepositAmount').addEventListener('input', onBaseDepositAmountChange);
+  renderDeposit();
 });
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalDate(new Date());
 }
 
 function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
+  return formatLocalMonth(new Date());
+}
+
+function formatLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatLocalMonth(date) {
+  return formatLocalDate(date).slice(0, 7);
 }
 
 // ── タブ切り替え ──
@@ -35,6 +71,7 @@ function switchTab(tab, btn) {
   document.getElementById('page-' + tab).classList.add('active');
   btn.classList.add('active');
   if (tab === 'view') renderList();
+  if (tab === 'deposit') renderDeposit();
 }
 
 // ── 登録 ──
@@ -42,11 +79,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('registerForm').addEventListener('submit', async e => {
     e.preventDefault();
     const entry = {
-      date:    document.getElementById('date').value,
-      amount:  parseInt(document.getElementById('amount').value, 10),
+      date: document.getElementById('date').value,
+      amount: parseInt(document.getElementById('amount').value, 10),
       purpose: document.getElementById('purpose').value,
-      wallet:  document.getElementById('wallet').value,
-      memo:    document.getElementById('memo').value.trim(),
+      wallet: document.getElementById('wallet').value,
+      memo: document.getElementById('memo').value.trim(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
     try {
@@ -68,25 +105,37 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+function loadBaseDepositAmount() {
+  const saved = parseInt(localStorage.getItem(BASE_DEPOSIT_STORAGE_KEY), 10);
+  return Number.isFinite(saved) ? saved : DEFAULT_BASE_DEPOSIT_AMOUNT;
+}
+
+function onBaseDepositAmountChange(e) {
+  const rawValue = parseInt(e.target.value, 10);
+  const amount = Number.isFinite(rawValue) ? rawValue : 0;
+  localStorage.setItem(BASE_DEPOSIT_STORAGE_KEY, String(amount));
+  renderDeposit();
+}
+
 // ── 一覧表示 ──
 function renderList() {
   const entries = cachedEntries;
-  const monthFilter   = document.getElementById('filterMonth').value;
+  const monthFilter = document.getElementById('filterMonth').value;
   const purposeFilter = document.getElementById('filterPurpose').value;
-  const walletFilter  = document.getElementById('filterWallet').value;
+  const walletFilter = document.getElementById('filterWallet').value;
 
   let filtered = entries.filter(e => {
-    if (monthFilter   && !e.date.startsWith(monthFilter)) return false;
-    if (purposeFilter && e.purpose !== purposeFilter)     return false;
-    if (walletFilter  && e.wallet  !== walletFilter)      return false;
+    if (monthFilter && !e.date.startsWith(monthFilter)) return false;
+    if (purposeFilter && e.purpose !== purposeFilter) return false;
+    if (walletFilter && e.wallet !== walletFilter) return false;
     return true;
   });
 
   filtered.sort((a, b) => b.date.localeCompare(a.date));
 
-  const tbody     = document.getElementById('entryList');
+  const tbody = document.getElementById('entryList');
   const mobileList = document.getElementById('mobileList');
-  const empty     = document.getElementById('emptyState');
+  const empty = document.getElementById('emptyState');
 
   if (filtered.length === 0) {
     tbody.innerHTML = '';
@@ -150,14 +199,97 @@ function renderList() {
     .reduce((s, e) => s + e.amount, 0);
   const allSum = entries.reduce((s, e) => s + e.amount, 0);
 
-  document.getElementById('monthTotal').textContent = '¥' + monthSum.toLocaleString();
-  document.getElementById('allTotal').textContent   = '¥' + allSum.toLocaleString();
+  document.getElementById('monthTotal').textContent = formatCurrency(monthSum);
+  document.getElementById('allTotal').textContent = formatCurrency(allSum);
   document.getElementById('totalCount').textContent = entries.length + '件';
+}
+
+function renderDeposit() {
+  const monthInput = document.getElementById('depositMonth');
+  const baseInput = document.getElementById('baseDepositAmount');
+  if (!monthInput || !baseInput) return;
+
+  const selectedMonth = monthInput.value || currentMonth();
+  const rawBaseAmount = parseInt(baseInput.value, 10);
+  const baseAmount = Number.isFinite(rawBaseAmount) ? rawBaseAmount : 0;
+
+  const monthlyEntries = cachedEntries
+    .filter(e => e.date && e.date.startsWith(selectedMonth))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const familyPersonalEntries = monthlyEntries.filter(e => e.wallet === 'family' && e.purpose === 'personal');
+  const personalFamilyEntries = monthlyEntries.filter(e => e.wallet === 'personal' && e.purpose === 'family');
+
+  const familyPersonalTotal = familyPersonalEntries.reduce((sum, e) => sum + e.amount, 0);
+  const personalFamilyTotal = personalFamilyEntries.reduce((sum, e) => sum + e.amount, 0);
+  const recommendedDeposit = baseAmount + familyPersonalTotal - personalFamilyTotal;
+
+  document.getElementById('depositBaseTotal').textContent = formatCurrency(baseAmount);
+  document.getElementById('depositFamilyPersonal').textContent = formatCurrency(familyPersonalTotal);
+  document.getElementById('depositPersonalFamily').textContent = formatCurrency(personalFamilyTotal);
+  document.getElementById('depositRecommendedTotal').textContent = formatCurrency(recommendedDeposit);
+  document.getElementById('depositFormula').textContent =
+    `${formatCurrency(baseAmount)} + ${formatCurrency(familyPersonalTotal)} - ${formatCurrency(personalFamilyTotal)} = ${formatCurrency(recommendedDeposit)}`;
+  document.getElementById('familyPersonalCount').textContent = familyPersonalEntries.length + '件';
+  document.getElementById('personalFamilyCount').textContent = personalFamilyEntries.length + '件';
+  document.getElementById('depositMonthEntryCount').textContent = monthlyEntries.length + '件';
+  document.getElementById('depositStatus').textContent = buildDepositStatusMessage(
+    selectedMonth,
+    familyPersonalTotal,
+    personalFamilyTotal,
+    recommendedDeposit
+  );
+
+  renderDepositDetailList(
+    'depositFamilyPersonalList',
+    familyPersonalEntries,
+    'この月は、共有財布で払った個人用の支出はありません。'
+  );
+  renderDepositDetailList(
+    'depositPersonalFamilyList',
+    personalFamilyEntries,
+    'この月は、私の財布で払った家族用の支出はありません。'
+  );
+}
+
+function buildDepositStatusMessage(selectedMonth, familyPersonalTotal, personalFamilyTotal, recommendedDeposit) {
+  const label = selectedMonth.replace('-', '年') + '月';
+  if (familyPersonalTotal === 0 && personalFamilyTotal === 0) {
+    return `${label}は立替精算がないため、基本入金額そのままで大丈夫です。`;
+  }
+  if (recommendedDeposit < 0) {
+    return `${label}は個人財布での家族立替が大きく、計算上の入金額はマイナスです。精算方法を確認してください。`;
+  }
+  return `${label}の立替分を反映した入金額です。`;
+}
+
+function renderDepositDetailList(containerId, entries, emptyMessage) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  if (entries.length === 0) {
+    container.innerHTML = `<div class="deposit-empty">${emptyMessage}</div>`;
+    return;
+  }
+
+  container.innerHTML = entries.map(entry => `
+    <div class="deposit-item">
+      <div>
+        <div class="deposit-item-date">${formatDate(entry.date)}</div>
+        <div class="deposit-item-memo">${entry.memo || 'メモなし'}</div>
+      </div>
+      <div class="deposit-item-amount">${formatCurrency(entry.amount)}</div>
+    </div>
+  `).join('');
 }
 
 function formatDate(d) {
   const [y, m, day] = d.split('-');
   return `${y}/${m}/${day}`;
+}
+
+function formatCurrency(amount) {
+  return '¥' + amount.toLocaleString();
 }
 
 // ── 削除 ──
@@ -177,11 +309,11 @@ function openEdit(id) {
   const entry = cachedEntries.find(e => e.id === id);
   if (!entry) return;
   editingId = id;
-  document.getElementById('editDate').value    = entry.date;
-  document.getElementById('editAmount').value  = entry.amount;
+  document.getElementById('editDate').value = entry.date;
+  document.getElementById('editAmount').value = entry.amount;
   document.getElementById('editPurpose').value = entry.purpose || 'personal';
-  document.getElementById('editWallet').value  = entry.wallet  || 'personal';
-  document.getElementById('editMemo').value    = entry.memo;
+  document.getElementById('editWallet').value = entry.wallet || 'personal';
+  document.getElementById('editMemo').value = entry.memo;
   document.getElementById('editModal').classList.add('open');
 }
 
@@ -192,11 +324,11 @@ function closeModal() {
 
 async function saveEdit() {
   if (!editingId) return;
-  const date    = document.getElementById('editDate').value;
-  const amount  = parseInt(document.getElementById('editAmount').value, 10);
+  const date = document.getElementById('editDate').value;
+  const amount = parseInt(document.getElementById('editAmount').value, 10);
   const purpose = document.getElementById('editPurpose').value;
-  const wallet  = document.getElementById('editWallet').value;
-  const memo    = document.getElementById('editMemo').value.trim();
+  const wallet = document.getElementById('editWallet').value;
+  const memo = document.getElementById('editMemo').value.trim();
 
   if (!date || isNaN(amount)) { alert('日付と金額は必須です'); return; }
 

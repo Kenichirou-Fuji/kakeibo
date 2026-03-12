@@ -18,12 +18,3 @@ const firebaseConfig = {
   appId: "1:772972328665:web:92d44e1ad524ca216930c8",
   measurementId: "G-D60V9RJFNS"
 };
-
-firebase.initializeApp(firebaseConfig);
-
-const db = firebase.firestore();
-
-// オフライン永続化（ネット接続が切れても操作でき、復帰後に自動同期）
-db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-  console.warn('オフライン永続化を有効にできませんでした:', err.code);
-});
