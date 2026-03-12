@@ -23,8 +23,18 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 const db = firebase.firestore();
+const auth = firebase.auth();
 
 // オフライン永続化（ネット接続が切れても操作でき、復帰後に自動同期）
 db.enablePersistence({ synchronizeTabs: true }).catch(err => {
   console.warn('オフライン永続化を有効にできませんでした:', err.code);
+});
+
+// 匿名認証（自動ログイン）
+auth.onAuthStateChanged(user => {
+  if (!user) {
+    auth.signInAnonymously().catch(err => {
+      console.error('匿名ログインエラー:', err);
+    });
+  }
 });
