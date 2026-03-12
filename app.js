@@ -1,20 +1,23 @@
-const STORAGE_KEY = 'kakeibo_entries';
 let editingId = null;
+let cachedEntries = [];
 
-// ── データ操作 ──
-function loadEntries() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-}
-
-function saveEntries(entries) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-}
+// ── Firestore リアルタイム同期 ──
+// データが変わると全デバイスで自動的に renderList() が呼ばれる
+db.collection('entries').onSnapshot(
+  snapshot => {
+    cachedEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderList();
+  },
+  err => {
+    console.error('Firestore 同期エラー:', err);
+    showToast('⚠️ データの読み込みに失敗しました');
+  }
+);
 
 // ── 初期化 ──
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('date').value = today();
   document.getElementById('filterMonth').value = currentMonth();
-  renderList();
 });
 
 function today() {
@@ -36,24 +39,27 @@ function switchTab(tab, btn) {
 
 // ── 登録 ──
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('registerForm').addEventListener('submit', e => {
+  document.getElementById('registerForm').addEventListener('submit', async e => {
     e.preventDefault();
     const entry = {
-      id: Date.now().toString(),
-      date: document.getElementById('date').value,
-      amount: parseInt(document.getElementById('amount').value, 10),
+      date:    document.getElementById('date').value,
+      amount:  parseInt(document.getElementById('amount').value, 10),
       purpose: document.getElementById('purpose').value,
-      wallet: document.getElementById('wallet').value,
-      memo: document.getElementById('memo').value.trim(),
+      wallet:  document.getElementById('wallet').value,
+      memo:    document.getElementById('memo').value.trim(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
-    const entries = loadEntries();
-    entries.push(entry);
-    saveEntries(entries);
-    showToast('登録しました！');
-    e.target.reset();
-    document.getElementById('date').value = today();
-    document.getElementById('purpose').value = 'personal';
-    document.getElementById('wallet').value = 'personal';
+    try {
+      await db.collection('entries').add(entry);
+      showToast('登録しました！');
+      e.target.reset();
+      document.getElementById('date').value = today();
+      document.getElementById('purpose').value = 'personal';
+      document.getElementById('wallet').value = 'personal';
+    } catch (err) {
+      console.error(err);
+      showToast('⚠️ 登録に失敗しました');
+    }
   });
 
   // モーダル外クリックで閉じる
@@ -64,23 +70,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── 一覧表示 ──
 function renderList() {
-  const entries = loadEntries();
-  const monthFilter = document.getElementById('filterMonth').value;
+  const entries = cachedEntries;
+  const monthFilter   = document.getElementById('filterMonth').value;
   const purposeFilter = document.getElementById('filterPurpose').value;
-  const walletFilter = document.getElementById('filterWallet').value;
+  const walletFilter  = document.getElementById('filterWallet').value;
 
   let filtered = entries.filter(e => {
-    if (monthFilter && !e.date.startsWith(monthFilter)) return false;
-    if (purposeFilter && e.purpose !== purposeFilter) return false;
-    if (walletFilter && e.wallet !== walletFilter) return false;
+    if (monthFilter   && !e.date.startsWith(monthFilter)) return false;
+    if (purposeFilter && e.purpose !== purposeFilter)     return false;
+    if (walletFilter  && e.wallet  !== walletFilter)      return false;
     return true;
   });
 
   filtered.sort((a, b) => b.date.localeCompare(a.date));
 
-  const tbody = document.getElementById('entryList');
+  const tbody     = document.getElementById('entryList');
   const mobileList = document.getElementById('mobileList');
-  const empty = document.getElementById('emptyState');
+  const empty     = document.getElementById('emptyState');
 
   if (filtered.length === 0) {
     tbody.innerHTML = '';
@@ -88,7 +94,7 @@ function renderList() {
     empty.style.display = '';
   } else {
     empty.style.display = 'none';
-    
+
     // デスクトップ表示
     tbody.innerHTML = filtered.map(e => `
       <tr>
@@ -145,7 +151,7 @@ function renderList() {
   const allSum = entries.reduce((s, e) => s + e.amount, 0);
 
   document.getElementById('monthTotal').textContent = '¥' + monthSum.toLocaleString();
-  document.getElementById('allTotal').textContent = '¥' + allSum.toLocaleString();
+  document.getElementById('allTotal').textContent   = '¥' + allSum.toLocaleString();
   document.getElementById('totalCount').textContent = entries.length + '件';
 }
 
@@ -155,24 +161,27 @@ function formatDate(d) {
 }
 
 // ── 削除 ──
-function deleteEntry(id) {
+async function deleteEntry(id) {
   if (!confirm('この項目を削除しますか？')) return;
-  const entries = loadEntries().filter(e => e.id !== id);
-  saveEntries(entries);
-  showToast('削除しました');
-  renderList();
+  try {
+    await db.collection('entries').doc(id).delete();
+    showToast('削除しました');
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 削除に失敗しました');
+  }
 }
 
 // ── 編集モーダル ──
 function openEdit(id) {
-  const entry = loadEntries().find(e => e.id === id);
+  const entry = cachedEntries.find(e => e.id === id);
   if (!entry) return;
   editingId = id;
-  document.getElementById('editDate').value = entry.date;
-  document.getElementById('editAmount').value = entry.amount;
+  document.getElementById('editDate').value    = entry.date;
+  document.getElementById('editAmount').value  = entry.amount;
   document.getElementById('editPurpose').value = entry.purpose || 'personal';
-  document.getElementById('editWallet').value = entry.wallet || 'personal';
-  document.getElementById('editMemo').value = entry.memo;
+  document.getElementById('editWallet').value  = entry.wallet  || 'personal';
+  document.getElementById('editMemo').value    = entry.memo;
   document.getElementById('editModal').classList.add('open');
 }
 
@@ -181,23 +190,24 @@ function closeModal() {
   editingId = null;
 }
 
-function saveEdit() {
+async function saveEdit() {
   if (!editingId) return;
-  const date = document.getElementById('editDate').value;
-  const amount = parseInt(document.getElementById('editAmount').value, 10);
-  
+  const date    = document.getElementById('editDate').value;
+  const amount  = parseInt(document.getElementById('editAmount').value, 10);
   const purpose = document.getElementById('editPurpose').value;
-  const wallet = document.getElementById('editWallet').value;
-  const memo = document.getElementById('editMemo').value.trim();
+  const wallet  = document.getElementById('editWallet').value;
+  const memo    = document.getElementById('editMemo').value.trim();
+
   if (!date || isNaN(amount)) { alert('日付と金額は必須です'); return; }
 
-  const entries = loadEntries().map(e =>
-    e.id === editingId ? { ...e, date, amount, purpose, wallet, memo } : e
-  );
-  saveEntries(entries);
-  closeModal();
-  showToast('更新しました！');
-  renderList();
+  try {
+    await db.collection('entries').doc(editingId).update({ date, amount, purpose, wallet, memo });
+    closeModal();
+    showToast('更新しました！');
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 更新に失敗しました');
+  }
 }
 
 // ── トースト通知 ──
@@ -225,7 +235,7 @@ function initSwipe() {
     card.addEventListener('touchmove', (e) => {
       const currentX = e.touches[0].clientX;
       const diff = startX - currentX;
-      
+
       if (diff > 0 && diff < 80) {
         cardContent.style.transform = `translateX(-${diff}px)`;
       }
@@ -252,3 +262,4 @@ function initSwipe() {
     });
   });
 }
+

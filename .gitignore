@@ -1,0 +1,4 @@
+node_modules/
+
+# Firebase設定ファイル（APIキーを含むため除外）
+firebase-config.js
