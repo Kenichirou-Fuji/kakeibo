@@ -17,14 +17,28 @@ firebase.auth().signInAnonymously()
 
 let editingId = null;
 let cachedEntries = [];
+let cachedMonthlyDeposits = {};
 const DEFAULT_BASE_DEPOSIT_AMOUNT = 180000;
 const BASE_DEPOSIT_STORAGE_KEY = 'baseDepositAmount';
+const MONTHLY_DEPOSIT_STATUS_TYPE = 'monthlyDepositStatus';
 
 // ── Firestore リアルタイム同期 ──
 // データが変わると全デバイスで自動的に renderList() が呼ばれる
 db.collection('entries').onSnapshot(
   snapshot => {
-    cachedEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    cachedEntries = [];
+    cachedMonthlyDeposits = {};
+
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data.entryType === MONTHLY_DEPOSIT_STATUS_TYPE) {
+        cachedMonthlyDeposits[data.month || doc.id.replace('monthlyDepositStatus-', '')] = { id: doc.id, ...data };
+        return;
+      }
+
+      cachedEntries.push({ id: doc.id, ...data });
+    });
+
     renderList();
     renderDeposit();
   },
@@ -42,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('baseDepositAmount').value = loadBaseDepositAmount();
   document.getElementById('depositMonth').addEventListener('change', renderDeposit);
   document.getElementById('baseDepositAmount').addEventListener('input', onBaseDepositAmountChange);
+  document.getElementById('depositCompletedCheckbox').addEventListener('change', onDepositCompletedChange);
   renderDeposit();
 });
 
@@ -223,6 +238,8 @@ function renderDeposit() {
   const familyPersonalTotal = familyPersonalEntries.reduce((sum, e) => sum + e.amount, 0);
   const personalFamilyTotal = personalFamilyEntries.reduce((sum, e) => sum + e.amount, 0);
   const recommendedDeposit = baseAmount + familyPersonalTotal - personalFamilyTotal;
+  const monthlyDepositStatus = cachedMonthlyDeposits[selectedMonth] || {};
+  const isDeposited = monthlyDepositStatus.deposited === true;
 
   document.getElementById('depositBaseTotal').textContent = formatCurrency(baseAmount);
   document.getElementById('depositFamilyPersonal').textContent = formatCurrency(familyPersonalTotal);
@@ -239,6 +256,11 @@ function renderDeposit() {
     personalFamilyTotal,
     recommendedDeposit
   );
+  document.getElementById('depositCompletedCheckbox').checked = isDeposited;
+  document.getElementById('depositCompletedMeta').textContent = buildDepositCompletedMeta(
+    monthlyDepositStatus,
+    recommendedDeposit
+  );
 
   renderDepositDetailList(
     'depositFamilyPersonalList',
@@ -252,6 +274,43 @@ function renderDeposit() {
   );
 }
 
+async function onDepositCompletedChange(e) {
+  const monthInput = document.getElementById('depositMonth');
+  const baseInput = document.getElementById('baseDepositAmount');
+  const selectedMonth = monthInput.value || currentMonth();
+  const rawBaseAmount = parseInt(baseInput.value, 10);
+  const baseAmount = Number.isFinite(rawBaseAmount) ? rawBaseAmount : 0;
+  const monthlyEntries = cachedEntries.filter(entry => entry.date && entry.date.startsWith(selectedMonth));
+  const familyPersonalTotal = monthlyEntries
+    .filter(entry => entry.wallet === 'family' && entry.purpose === 'personal')
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const personalFamilyTotal = monthlyEntries
+    .filter(entry => entry.wallet === 'personal' && entry.purpose === 'family')
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const recommendedDeposit = baseAmount + familyPersonalTotal - personalFamilyTotal;
+  const checked = e.target.checked;
+
+  e.target.disabled = true;
+  try {
+    await db.collection('entries').doc(`monthlyDepositStatus-${selectedMonth}`).set({
+      entryType: MONTHLY_DEPOSIT_STATUS_TYPE,
+      month: selectedMonth,
+      deposited: checked,
+      checkedAt: checked ? firebase.firestore.FieldValue.serverTimestamp() : null,
+      amountAtCheck: checked ? recommendedDeposit : null,
+      baseAmountAtCheck: checked ? baseAmount : null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    showToast(checked ? '入金済みにしました' : '未入金に戻しました');
+  } catch (err) {
+    console.error(err);
+    e.target.checked = !checked;
+    showToast('⚠️ 入金状態の更新に失敗しました');
+  } finally {
+    e.target.disabled = false;
+  }
+}
+
 function buildDepositStatusMessage(selectedMonth, familyPersonalTotal, personalFamilyTotal, recommendedDeposit) {
   const label = selectedMonth.replace('-', '年') + '月';
   if (familyPersonalTotal === 0 && personalFamilyTotal === 0) {
@@ -261,6 +320,22 @@ function buildDepositStatusMessage(selectedMonth, familyPersonalTotal, personalF
     return `${label}は個人財布での家族立替が大きく、計算上の入金額はマイナスです。精算方法を確認してください。`;
   }
   return `${label}の立替分を反映した入金額です。`;
+}
+
+function buildDepositCompletedMeta(monthlyDepositStatus, recommendedDeposit) {
+  if (monthlyDepositStatus.deposited !== true) {
+    return '未入金';
+  }
+
+  const checkedAt = monthlyDepositStatus.checkedAt && typeof monthlyDepositStatus.checkedAt.toDate === 'function'
+    ? monthlyDepositStatus.checkedAt.toDate()
+    : null;
+  const checkedAtLabel = checkedAt ? formatDateTime(checkedAt) : '記録時刻不明';
+  const amountAtCheck = Number.isFinite(monthlyDepositStatus.amountAtCheck)
+    ? monthlyDepositStatus.amountAtCheck
+    : recommendedDeposit;
+
+  return `入金済み (${formatCurrency(amountAtCheck)} / ${checkedAtLabel})`;
 }
 
 function renderDepositDetailList(containerId, entries, emptyMessage) {
@@ -290,6 +365,15 @@ function formatDate(d) {
 
 function formatCurrency(amount) {
   return '¥' + amount.toLocaleString();
+}
+
+function formatDateTime(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}/${month}/${day} ${hours}:${minutes}`;
 }
 
 // ── 削除 ──
