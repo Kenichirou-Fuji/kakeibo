@@ -221,43 +221,76 @@ function showToast(msg) {
 // ── スワイプ機能 ──
 function initSwipe() {
   const cards = document.querySelectorAll('.mobile-card');
+  const closeCard = (card) => {
+    const cardContent = card.querySelector('.card-content');
+    if (!cardContent) return;
+    card.classList.remove('swiped');
+    cardContent.classList.remove('swiped');
+    cardContent.style.transform = 'translateX(0)';
+  };
+
+  const openCard = (card, width) => {
+    const cardContent = card.querySelector('.card-content');
+    if (!cardContent) return;
+    card.style.setProperty('--swipe-actions-width', `${width}px`);
+    card.classList.add('swiped');
+    cardContent.classList.add('swiped');
+    cardContent.style.transform = `translateX(-${width}px)`;
+  };
+
+  const closeOtherCards = (activeCard) => {
+    cards.forEach(card => {
+      if (card !== activeCard) closeCard(card);
+    });
+  };
+
   cards.forEach(card => {
     let startX = 0;
     let startTime = 0;
     const cardContent = card.querySelector('.card-content');
+    const cardActions = card.querySelector('.card-actions');
+
+    if (!cardContent || !cardActions) return;
+
+    const getRevealWidth = () => Math.ceil(cardActions.getBoundingClientRect().width);
 
     card.addEventListener('touchstart', (e) => {
       startX = e.touches[0].clientX;
       startTime = Date.now();
-      card.classList.remove('swiped');
+      closeOtherCards(card);
+      card.style.setProperty('--swipe-actions-width', `${getRevealWidth()}px`);
     }, false);
 
     card.addEventListener('touchmove', (e) => {
       const currentX = e.touches[0].clientX;
       const diff = startX - currentX;
+      const revealWidth = getRevealWidth();
 
-      if (diff > 0 && diff < 80) {
-        cardContent.style.transform = `translateX(-${diff}px)`;
+      if (diff <= 0) {
+        cardContent.style.transform = 'translateX(0)';
+        return;
       }
+
+      cardContent.style.transform = `translateX(-${Math.min(diff, revealWidth)}px)`;
     }, false);
 
     card.addEventListener('touchend', (e) => {
       const endX = e.changedTouches[0].clientX;
       const diff = startX - endX;
       const duration = Date.now() - startTime;
+      const revealWidth = getRevealWidth();
 
-      if ((diff > 30 && duration < 500) || diff > 40) {
-        card.classList.add('swiped');
+      if ((diff > 30 && duration < 500) || diff > revealWidth / 2) {
+        openCard(card, revealWidth);
       } else {
-        cardContent.style.transform = 'translateX(0)';
+        closeCard(card);
       }
     }, false);
 
     // タップでスワイプ状態をリセット
     cardContent.addEventListener('click', (e) => {
       if (!e.target.closest('button')) {
-        card.classList.remove('swiped');
-        cardContent.style.transform = 'translateX(0)';
+        closeCard(card);
       }
     });
   });

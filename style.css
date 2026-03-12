@@ -271,6 +271,7 @@ td { padding: 0.85rem 1rem; }
     margin-bottom: 0.75rem;
     overflow: hidden;
     position: relative;
+    --swipe-actions-width: 0px;
   }
 
   .card-content {
@@ -286,7 +287,7 @@ td { padding: 0.85rem 1rem; }
   }
 
   .card-content.swiped {
-    transform: translateX(-80px);
+    transform: translateX(calc(-1 * var(--swipe-actions-width)));
   }
 
   .card-row {
@@ -330,6 +331,7 @@ td { padding: 0.85rem 1rem; }
     display: flex;
     background: #fff5f5;
     z-index: 0;
+    width: max-content;
   }
 
   .card-actions button {
