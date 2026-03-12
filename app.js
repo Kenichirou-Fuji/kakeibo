@@ -1,3 +1,16 @@
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.firestore();
+
+firebase.auth().signInAnonymously()
+  .then(() => {
+    console.log("Firebase Auth: 匿名ログインに成功しました");
+  })
+  .catch((error) => {
+    console.error("Firebase Auth Error:", error);
+    showToast("⚠️ ログインに失敗しました");
+  });
+
 let editingId = null;
 let cachedEntries = [];
 
@@ -42,11 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('registerForm').addEventListener('submit', async e => {
     e.preventDefault();
     const entry = {
-      date:    document.getElementById('date').value,
-      amount:  parseInt(document.getElementById('amount').value, 10),
+      date: document.getElementById('date').value,
+      amount: parseInt(document.getElementById('amount').value, 10),
       purpose: document.getElementById('purpose').value,
-      wallet:  document.getElementById('wallet').value,
-      memo:    document.getElementById('memo').value.trim(),
+      wallet: document.getElementById('wallet').value,
+      memo: document.getElementById('memo').value.trim(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
     try {
@@ -71,22 +84,22 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── 一覧表示 ──
 function renderList() {
   const entries = cachedEntries;
-  const monthFilter   = document.getElementById('filterMonth').value;
+  const monthFilter = document.getElementById('filterMonth').value;
   const purposeFilter = document.getElementById('filterPurpose').value;
-  const walletFilter  = document.getElementById('filterWallet').value;
+  const walletFilter = document.getElementById('filterWallet').value;
 
   let filtered = entries.filter(e => {
-    if (monthFilter   && !e.date.startsWith(monthFilter)) return false;
-    if (purposeFilter && e.purpose !== purposeFilter)     return false;
-    if (walletFilter  && e.wallet  !== walletFilter)      return false;
+    if (monthFilter && !e.date.startsWith(monthFilter)) return false;
+    if (purposeFilter && e.purpose !== purposeFilter) return false;
+    if (walletFilter && e.wallet !== walletFilter) return false;
     return true;
   });
 
   filtered.sort((a, b) => b.date.localeCompare(a.date));
 
-  const tbody     = document.getElementById('entryList');
+  const tbody = document.getElementById('entryList');
   const mobileList = document.getElementById('mobileList');
-  const empty     = document.getElementById('emptyState');
+  const empty = document.getElementById('emptyState');
 
   if (filtered.length === 0) {
     tbody.innerHTML = '';
@@ -151,7 +164,7 @@ function renderList() {
   const allSum = entries.reduce((s, e) => s + e.amount, 0);
 
   document.getElementById('monthTotal').textContent = '¥' + monthSum.toLocaleString();
-  document.getElementById('allTotal').textContent   = '¥' + allSum.toLocaleString();
+  document.getElementById('allTotal').textContent = '¥' + allSum.toLocaleString();
   document.getElementById('totalCount').textContent = entries.length + '件';
 }
 
@@ -177,11 +190,11 @@ function openEdit(id) {
   const entry = cachedEntries.find(e => e.id === id);
   if (!entry) return;
   editingId = id;
-  document.getElementById('editDate').value    = entry.date;
-  document.getElementById('editAmount').value  = entry.amount;
+  document.getElementById('editDate').value = entry.date;
+  document.getElementById('editAmount').value = entry.amount;
   document.getElementById('editPurpose').value = entry.purpose || 'personal';
-  document.getElementById('editWallet').value  = entry.wallet  || 'personal';
-  document.getElementById('editMemo').value    = entry.memo;
+  document.getElementById('editWallet').value = entry.wallet || 'personal';
+  document.getElementById('editMemo').value = entry.memo;
   document.getElementById('editModal').classList.add('open');
 }
 
@@ -192,11 +205,11 @@ function closeModal() {
 
 async function saveEdit() {
   if (!editingId) return;
-  const date    = document.getElementById('editDate').value;
-  const amount  = parseInt(document.getElementById('editAmount').value, 10);
+  const date = document.getElementById('editDate').value;
+  const amount = parseInt(document.getElementById('editAmount').value, 10);
   const purpose = document.getElementById('editPurpose').value;
-  const wallet  = document.getElementById('editWallet').value;
-  const memo    = document.getElementById('editMemo').value.trim();
+  const wallet = document.getElementById('editWallet').value;
+  const memo = document.getElementById('editMemo').value.trim();
 
   if (!date || isNaN(amount)) { alert('日付と金額は必須です'); return; }
 
