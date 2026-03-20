@@ -140,6 +140,7 @@ function renderList() {
   const walletFilter = document.getElementById('filterWallet').value;
 
   let filtered = entries.filter(e => {
+    if (!e.date) return false;
     if (monthFilter && !e.date.startsWith(monthFilter)) return false;
     if (purposeFilter && e.purpose !== purposeFilter) return false;
     if (walletFilter && e.wallet !== walletFilter) return false;
@@ -210,7 +211,7 @@ function renderList() {
   // サマリー更新
   const thisMonth = currentMonth();
   const monthSum = entries
-    .filter(e => e.date.startsWith(thisMonth))
+    .filter(e => e.date && e.date.startsWith(thisMonth))
     .reduce((s, e) => s + e.amount, 0);
   const allSum = entries.reduce((s, e) => s + e.amount, 0);
 
