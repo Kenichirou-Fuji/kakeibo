@@ -212,8 +212,8 @@ function renderList() {
   const thisMonth = currentMonth();
   const monthSum = entries
     .filter(e => e.date && e.date.startsWith(thisMonth))
-    .reduce((s, e) => s + e.amount, 0);
-  const allSum = entries.reduce((s, e) => s + e.amount, 0);
+    .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const allSum = entries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   document.getElementById('monthTotal').textContent = formatCurrency(monthSum);
   document.getElementById('allTotal').textContent = formatCurrency(allSum);
