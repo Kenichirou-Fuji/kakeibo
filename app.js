@@ -6,15 +6,6 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err => {
   console.warn('オフライン永続化を有効にできませんでした:', err.code);
 });
 
-firebase.auth().signInAnonymously()
-  .then(() => {
-    console.log("Firebase Auth: 匿名ログインに成功しました");
-  })
-  .catch((error) => {
-    console.error("Firebase Auth Error:", error);
-    showToast("⚠️ ログインに失敗しました");
-  });
-
 let editingId = null;
 let cachedEntries = [];
 let cachedMonthlyDeposits = {};
@@ -22,31 +13,45 @@ const DEFAULT_BASE_DEPOSIT_AMOUNT = 180000;
 const BASE_DEPOSIT_STORAGE_KEY = 'baseDepositAmount';
 const MONTHLY_DEPOSIT_STATUS_TYPE = 'monthlyDepositStatus';
 
-// ── Firestore リアルタイム同期 ──
-// データが変わると全デバイスで自動的に renderList() が呼ばれる
-db.collection('entries').onSnapshot(
-  snapshot => {
-    cachedEntries = [];
-    cachedMonthlyDeposits = {};
+// ── 認証完了後に Firestore リスナーを起動 ──
+firebase.auth().onAuthStateChanged(user => {
+  if (user) {
+    console.log("Firebase Auth: 匿名ログインに成功しました");
 
-    snapshot.docs.forEach(doc => {
-      const data = doc.data();
-      if (data.entryType === MONTHLY_DEPOSIT_STATUS_TYPE) {
-        cachedMonthlyDeposits[data.month || doc.id.replace('monthlyDepositStatus-', '')] = { id: doc.id, ...data };
-        return;
+    // ── Firestore リアルタイム同期 ──
+    // データが変わると全デバイスで自動的に renderList() が呼ばれる
+    db.collection('entries').onSnapshot(
+      snapshot => {
+        cachedEntries = [];
+        cachedMonthlyDeposits = {};
+
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.entryType === MONTHLY_DEPOSIT_STATUS_TYPE) {
+            cachedMonthlyDeposits[data.month || doc.id.replace('monthlyDepositStatus-', '')] = { id: doc.id, ...data };
+            return;
+          }
+
+          cachedEntries.push({ id: doc.id, ...data });
+        });
+
+        renderList();
+        renderDeposit();
+      },
+      err => {
+        console.error('Firestore 同期エラー:', err);
+        showToast('⚠️ データの読み込みに失敗しました');
       }
-
-      cachedEntries.push({ id: doc.id, ...data });
-    });
-
-    renderList();
-    renderDeposit();
-  },
-  err => {
-    console.error('Firestore 同期エラー:', err);
-    showToast('⚠️ データの読み込みに失敗しました');
+    );
+  } else {
+    // 未ログインなら匿名ログイン
+    firebase.auth().signInAnonymously()
+      .catch((error) => {
+        console.error("Firebase Auth Error:", error);
+        showToast("⚠️ ログインに失敗しました");
+      });
   }
-);
+});
 
 // ── 初期化 ──
 document.addEventListener('DOMContentLoaded', () => {
