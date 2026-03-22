@@ -146,6 +146,18 @@
     </div>
   </div>
 
+  <!-- 固定費セクション -->
+  <div class="fixed-cost-section">
+    <div class="fixed-cost-header" onclick="toggleFixedCostSection()">
+      <span><span id="fixedCostToggle">▼</span> 🔄 固定費</span>
+      <span class="fixed-cost-total" id="fixedCostTotal">¥0</span>
+    </div>
+    <div id="fixedCostBody">
+      <div id="fixedCostList"></div>
+      <button class="btn-add-fixed" onclick="openFixedCostModal()">＋ 固定費を追加</button>
+    </div>
+  </div>
+
   <div class="filters"><select id="filterPurpose" onchange="renderList()">
       <option value="">すべての用途</option>
       <option value="personal">個人用</option>
@@ -213,6 +225,41 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
       <button class="btn-save" onclick="saveEdit()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 固定費モーダル ── -->
+<div class="modal-overlay" id="fixedCostModal">
+  <div class="modal">
+    <h2 id="fixedCostModalTitle">＋ 固定費を追加</h2>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>固定費名</label>
+        <input type="text" id="fixedCostName" placeholder="例：家賃" required />
+      </div>
+      <div class="form-group">
+        <label>金額（円/月）</label>
+        <input type="number" id="fixedCostAmount" min="0" placeholder="80000" required />
+      </div>
+      <div class="form-group">
+        <label>用途（誰が使うか）</label>
+        <select id="fixedCostPurpose">
+          <option value="personal">個人用</option>
+          <option value="family">家族用</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>財布（どの財布から）</label>
+        <select id="fixedCostWallet">
+          <option value="personal">私の財布</option>
+          <option value="family">共有財布</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeFixedCostModal()">キャンセル</button>
+      <button class="btn-save" onclick="saveFixedCost()">保存する</button>
     </div>
   </div>
 </div>

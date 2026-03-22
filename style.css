@@ -575,6 +575,110 @@ td { padding: 0.85rem 1rem; }
   cursor: pointer;
 }
 
+/* ── 固定費セクション ── */
+.fixed-cost-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+.fixed-cost-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  user-select: none;
+}
+
+.fixed-cost-header:hover {
+  background: #f7fafc;
+}
+
+#fixedCostToggle {
+  display: inline-block;
+  font-size: 0.75rem;
+  margin-right: 4px;
+  transition: transform 0.2s;
+}
+
+.fixed-cost-total {
+  color: #667eea;
+  font-weight: 700;
+}
+
+#fixedCostBody {
+  padding: 0 16px 16px;
+}
+
+.fixed-cost-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.fixed-cost-item:last-child {
+  border-bottom: none;
+}
+
+.fixed-cost-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.fixed-cost-badges {
+  display: flex;
+  gap: 4px;
+}
+
+.fixed-cost-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fixed-cost-amount {
+  font-weight: 700;
+  color: #2d3748;
+  white-space: nowrap;
+}
+
+.fixed-cost-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.fixed-cost-empty {
+  text-align: center;
+  color: #a0aec0;
+  padding: 16px 0;
+  font-size: 0.9rem;
+}
+
+.btn-add-fixed {
+  width: 100%;
+  padding: 10px;
+  margin-top: 8px;
+  background: #edf2f7;
+  border: 2px dashed #cbd5e0;
+  border-radius: 8px;
+  color: #4a5568;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-add-fixed:hover {
+  background: #e2e8f0;
+  border-color: #667eea;
+  color: #667eea;
+}
+
 @media (max-width: 520px) {
   .form-grid { grid-template-columns: 1fr; }
   .form-group.full { grid-column: 1; }
@@ -584,5 +688,14 @@ td { padding: 0.85rem 1rem; }
   .deposit-item {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .fixed-cost-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .fixed-cost-right {
+    width: 100%;
+    justify-content: space-between;
   }
 }

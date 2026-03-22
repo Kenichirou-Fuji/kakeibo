@@ -7,8 +7,11 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err => {
 });
 
 let editingId = null;
+let editingFixedCostId = null;
 let cachedEntries = [];
+let cachedFixedCosts = [];
 let cachedMonthlyDeposits = {};
+const FIXED_COST_TYPE = 'fixedCost';
 const DEFAULT_BASE_DEPOSIT_AMOUNT = 180000;
 const BASE_DEPOSIT_STORAGE_KEY = 'baseDepositAmount';
 const MONTHLY_DEPOSIT_STATUS_TYPE = 'monthlyDepositStatus';
@@ -23,6 +26,7 @@ firebase.auth().onAuthStateChanged(user => {
     db.collection('entries').onSnapshot(
       snapshot => {
         cachedEntries = [];
+        cachedFixedCosts = [];
         cachedMonthlyDeposits = {};
 
         snapshot.docs.forEach(doc => {
@@ -31,11 +35,16 @@ firebase.auth().onAuthStateChanged(user => {
             cachedMonthlyDeposits[data.month || doc.id.replace('monthlyDepositStatus-', '')] = { id: doc.id, ...data };
             return;
           }
+          if (data.entryType === FIXED_COST_TYPE) {
+            cachedFixedCosts.push({ id: doc.id, ...data });
+            return;
+          }
 
           cachedEntries.push({ id: doc.id, ...data });
         });
 
         renderList();
+        renderFixedCosts();
         renderDeposit();
       },
       err => {
@@ -90,7 +99,7 @@ function switchTab(tab, btn) {
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + tab).classList.add('active');
   btn.classList.add('active');
-  if (tab === 'view') renderList();
+  if (tab === 'view') { renderList(); renderFixedCosts(); }
   if (tab === 'deposit') renderDeposit();
 }
 
@@ -122,6 +131,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // モーダル外クリックで閉じる
   document.getElementById('editModal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal();
+  });
+  document.getElementById('fixedCostModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeFixedCostModal();
   });
 });
 
@@ -243,16 +255,31 @@ function renderDeposit() {
 
   const familyPersonalTotal = familyPersonalEntries.reduce((sum, e) => sum + e.amount, 0);
   const personalFamilyTotal = personalFamilyEntries.reduce((sum, e) => sum + e.amount, 0);
-  const recommendedDeposit = baseAmount + familyPersonalTotal - personalFamilyTotal;
+
+  // 固定費の入金額への反映
+  const fixedFamilyPersonal = cachedFixedCosts
+    .filter(e => e.wallet === 'family' && e.purpose === 'personal')
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const fixedPersonalFamily = cachedFixedCosts
+    .filter(e => e.wallet === 'personal' && e.purpose === 'family')
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+  const totalFamilyPersonal = familyPersonalTotal + fixedFamilyPersonal;
+  const totalPersonalFamily = personalFamilyTotal + fixedPersonalFamily;
+  const recommendedDeposit = baseAmount + totalFamilyPersonal - totalPersonalFamily;
   const monthlyDepositStatus = cachedMonthlyDeposits[selectedMonth] || {};
   const isDeposited = monthlyDepositStatus.deposited === true;
 
   document.getElementById('depositBaseTotal').textContent = formatCurrency(baseAmount);
-  document.getElementById('depositFamilyPersonal').textContent = formatCurrency(familyPersonalTotal);
-  document.getElementById('depositPersonalFamily').textContent = formatCurrency(personalFamilyTotal);
+  document.getElementById('depositFamilyPersonal').textContent = formatCurrency(totalFamilyPersonal);
+  document.getElementById('depositPersonalFamily').textContent = formatCurrency(totalPersonalFamily);
   document.getElementById('depositRecommendedTotal').textContent = formatCurrency(recommendedDeposit);
+
+  // 固定費がある場合は内訳を表示
+  const fpDetail = fixedFamilyPersonal > 0 ? ` (変動${formatCurrency(familyPersonalTotal)} + 固定${formatCurrency(fixedFamilyPersonal)})` : '';
+  const pfDetail = fixedPersonalFamily > 0 ? ` (変動${formatCurrency(personalFamilyTotal)} + 固定${formatCurrency(fixedPersonalFamily)})` : '';
   document.getElementById('depositFormula').textContent =
-    `${formatCurrency(baseAmount)} + ${formatCurrency(familyPersonalTotal)} - ${formatCurrency(personalFamilyTotal)} = ${formatCurrency(recommendedDeposit)}`;
+    `${formatCurrency(baseAmount)} + ${formatCurrency(totalFamilyPersonal)}${fpDetail} - ${formatCurrency(totalPersonalFamily)}${pfDetail} = ${formatCurrency(recommendedDeposit)}`;
   document.getElementById('familyPersonalCount').textContent = familyPersonalEntries.length + '件';
   document.getElementById('personalFamilyCount').textContent = personalFamilyEntries.length + '件';
   document.getElementById('depositMonthEntryCount').textContent = monthlyEntries.length + '件';
@@ -293,7 +320,13 @@ async function onDepositCompletedChange(e) {
   const personalFamilyTotal = monthlyEntries
     .filter(entry => entry.wallet === 'personal' && entry.purpose === 'family')
     .reduce((sum, entry) => sum + entry.amount, 0);
-  const recommendedDeposit = baseAmount + familyPersonalTotal - personalFamilyTotal;
+  const fixedFP = cachedFixedCosts
+    .filter(e2 => e2.wallet === 'family' && e2.purpose === 'personal')
+    .reduce((sum, e2) => sum + (Number(e2.amount) || 0), 0);
+  const fixedPF = cachedFixedCosts
+    .filter(e2 => e2.wallet === 'personal' && e2.purpose === 'family')
+    .reduce((sum, e2) => sum + (Number(e2.amount) || 0), 0);
+  const recommendedDeposit = baseAmount + (familyPersonalTotal + fixedFP) - (personalFamilyTotal + fixedPF);
   const checked = e.target.checked;
 
   e.target.disabled = true;
@@ -362,6 +395,120 @@ function renderDepositDetailList(containerId, entries, emptyMessage) {
       <div class="deposit-item-amount">${formatCurrency(entry.amount)}</div>
     </div>
   `).join('');
+}
+
+// ── 固定費 ──
+function renderFixedCosts() {
+  const container = document.getElementById('fixedCostList');
+  if (!container) return;
+
+  const totalEl = document.getElementById('fixedCostTotal');
+  const total = cachedFixedCosts.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  if (totalEl) totalEl.textContent = formatCurrency(total);
+
+  if (cachedFixedCosts.length === 0) {
+    container.innerHTML = '<div class="fixed-cost-empty">固定費が登録されていません</div>';
+    return;
+  }
+
+  container.innerHTML = cachedFixedCosts.map(e => `
+    <div class="fixed-cost-item">
+      <div class="fixed-cost-info">
+        <div class="fixed-cost-name">${e.name}</div>
+        <div class="fixed-cost-badges">
+          <span class="badge badge-${e.purpose || 'personal'}">${e.purpose === 'family' ? '家族用' : '個人用'}</span>
+          <span class="badge badge-${e.wallet || 'personal'}">${e.wallet === 'family' ? '共有財布' : '私の財布'}</span>
+        </div>
+      </div>
+      <div class="fixed-cost-right">
+        <div class="fixed-cost-amount">${formatCurrency(e.amount)}</div>
+        <div class="fixed-cost-actions">
+          <button class="btn-edit" onclick="openEditFixedCost('${e.id}')">編集</button>
+          <button class="btn-del" onclick="deleteFixedCost('${e.id}')">削除</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openFixedCostModal() {
+  editingFixedCostId = null;
+  document.getElementById('fixedCostName').value = '';
+  document.getElementById('fixedCostAmount').value = '';
+  document.getElementById('fixedCostPurpose').value = 'personal';
+  document.getElementById('fixedCostWallet').value = 'personal';
+  document.getElementById('fixedCostModalTitle').textContent = '＋ 固定費を追加';
+  document.getElementById('fixedCostModal').classList.add('open');
+}
+
+function closeFixedCostModal() {
+  document.getElementById('fixedCostModal').classList.remove('open');
+  editingFixedCostId = null;
+}
+
+function openEditFixedCost(id) {
+  const entry = cachedFixedCosts.find(e => e.id === id);
+  if (!entry) return;
+  editingFixedCostId = id;
+  document.getElementById('fixedCostName').value = entry.name || '';
+  document.getElementById('fixedCostAmount').value = entry.amount;
+  document.getElementById('fixedCostPurpose').value = entry.purpose || 'personal';
+  document.getElementById('fixedCostWallet').value = entry.wallet || 'personal';
+  document.getElementById('fixedCostModalTitle').textContent = '✏️ 固定費を編集';
+  document.getElementById('fixedCostModal').classList.add('open');
+}
+
+async function saveFixedCost() {
+  const name = document.getElementById('fixedCostName').value.trim();
+  const amount = parseInt(document.getElementById('fixedCostAmount').value, 10);
+  const purpose = document.getElementById('fixedCostPurpose').value;
+  const wallet = document.getElementById('fixedCostWallet').value;
+
+  if (!name || isNaN(amount)) { alert('名前と金額は必須です'); return; }
+
+  try {
+    if (editingFixedCostId) {
+      await db.collection('entries').doc(editingFixedCostId).update({ name, amount, purpose, wallet });
+      showToast('固定費を更新しました');
+    } else {
+      await db.collection('entries').add({
+        entryType: FIXED_COST_TYPE,
+        name,
+        amount,
+        purpose,
+        wallet,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      showToast('固定費を登録しました');
+    }
+    closeFixedCostModal();
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 固定費の保存に失敗しました');
+  }
+}
+
+async function deleteFixedCost(id) {
+  if (!confirm('この固定費を削除しますか？')) return;
+  try {
+    await db.collection('entries').doc(id).delete();
+    showToast('固定費を削除しました');
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 固定費の削除に失敗しました');
+  }
+}
+
+function toggleFixedCostSection() {
+  const section = document.getElementById('fixedCostBody');
+  const toggle = document.getElementById('fixedCostToggle');
+  if (section.style.display === 'none') {
+    section.style.display = '';
+    toggle.textContent = '▼';
+  } else {
+    section.style.display = 'none';
+    toggle.textContent = '▶';
+  }
 }
 
 function formatDate(d) {
