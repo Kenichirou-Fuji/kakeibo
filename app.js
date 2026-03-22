@@ -251,7 +251,11 @@ function renderList() {
   const monthSum = entries
     .filter(e => e.date && e.date.startsWith(thisMonth))
     .reduce((s, e) => s + (Number(e.amount) || 0), 0) + fixedCostMonthSum;
-  const allSum = entries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const fixedCostAllMonths = (() => {
+    const months = new Set(entries.map(e => e.date && e.date.slice(0, 7)).filter(Boolean));
+    return months.size * fixedCostMonthSum;
+  })();
+  const allSum = entries.reduce((s, e) => s + (Number(e.amount) || 0), 0) + fixedCostAllMonths;
 
   document.getElementById('monthTotal').textContent = formatCurrency(monthSum);
   document.getElementById('allTotal').textContent = formatCurrency(allSum);
