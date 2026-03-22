@@ -575,6 +575,20 @@ td { padding: 0.85rem 1rem; }
   cursor: pointer;
 }
 
+/* ── 固定費バッジ・行 ── */
+.badge-fixed {
+  background: #e9d8fd;
+  color: #6b46c1;
+}
+
+.fixed-cost-row td {
+  background: #faf5ff;
+}
+
+.fixed-cost-card {
+  background: #faf5ff;
+}
+
 /* ── 固定費セクション ── */
 .fixed-cost-section {
   background: white;

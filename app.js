@@ -164,6 +164,18 @@ function renderList() {
     return true;
   });
 
+  // 月フィルターが指定されている場合、固定費を月初エントリとして追加
+  if (monthFilter) {
+    const fixedAsEntries = cachedFixedCosts
+      .filter(e => {
+        if (purposeFilter && e.purpose !== purposeFilter) return false;
+        if (walletFilter && e.wallet !== walletFilter) return false;
+        return true;
+      })
+      .map(e => ({ ...e, date: `${monthFilter}-01`, isFixedCost: true }));
+    filtered = filtered.concat(fixedAsEntries);
+  }
+
   filtered.sort((a, b) => b.date.localeCompare(a.date));
 
   const tbody = document.getElementById('entryList');
@@ -179,24 +191,28 @@ function renderList() {
 
     // デスクトップ表示
     tbody.innerHTML = filtered.map(e => `
-      <tr>
+      <tr${e.isFixedCost ? ' class="fixed-cost-row"' : ''}>
         <td>${formatDate(e.date)}</td>
-        <td><span class="badge badge-${e.purpose || 'personal'}">${e.purpose === 'family' ? '家族用' : '個人用'}</span></td>
+        <td>
+          <span class="badge badge-${e.purpose || 'personal'}">${e.purpose === 'family' ? '家族用' : '個人用'}</span>
+          ${e.isFixedCost ? '<span class="badge badge-fixed">固定費</span>' : ''}
+        </td>
         <td><span class="badge badge-${e.wallet || 'personal'}">${e.wallet === 'family' ? '共有財布' : '私の財布'}</span></td>
         <td class="amount-cell">¥${e.amount.toLocaleString()}</td>
-        <td style="color:#718096">${e.memo || '—'}</td>
+        <td style="color:#718096">${e.isFixedCost ? e.name : (e.memo || '—')}</td>
         <td>
+          ${e.isFixedCost ? '' : `
           <div class="actions">
             <button class="btn-edit" onclick="openEdit('${e.id}')">編集</button>
             <button class="btn-del"  onclick="deleteEntry('${e.id}')">削除</button>
-          </div>
+          </div>`}
         </td>
       </tr>
     `).join('');
 
     // モバイル表示
     mobileList.innerHTML = filtered.map(e => `
-      <div class="mobile-card" data-id="${e.id}">
+      <div class="mobile-card${e.isFixedCost ? ' fixed-cost-card' : ''}" ${e.isFixedCost ? '' : `data-id="${e.id}"`}>
         <div class="card-content">
           <div class="card-row">
             <div>
@@ -211,25 +227,30 @@ function renderList() {
           <div class="card-row">
             <span class="card-badge badge-${e.purpose || 'personal'}">${e.purpose === 'family' ? '家族用' : '個人用'}</span>
             <span class="card-badge badge-${e.wallet || 'personal'}">${e.wallet === 'family' ? '共有財布' : '私の財布'}</span>
+            ${e.isFixedCost ? '<span class="card-badge badge-fixed">固定費</span>' : ''}
           </div>
-          ${e.memo ? `<div class="card-row" style="color: #718096; font-size: 0.85rem;">💬 ${e.memo}</div>` : ''}
+          ${e.isFixedCost
+            ? `<div class="card-row" style="color: #718096; font-size: 0.85rem;">🔄 ${e.name}</div>`
+            : (e.memo ? `<div class="card-row" style="color: #718096; font-size: 0.85rem;">💬 ${e.memo}</div>` : '')}
         </div>
+        ${e.isFixedCost ? '' : `
         <div class="card-actions">
           <button class="card-btn-edit" onclick="openEdit('${e.id}')">✏️ 編集</button>
           <button class="card-btn-del" onclick="deleteEntry('${e.id}')">🗑️ 削除</button>
-        </div>
+        </div>`}
       </div>
     `).join('');
 
-    // スワイプ機能を初期化
+    // スワイプ機能を初期化（固定費以外のカードのみ）
     initSwipe();
   }
 
   // サマリー更新
   const thisMonth = currentMonth();
+  const fixedCostMonthSum = cachedFixedCosts.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const monthSum = entries
     .filter(e => e.date && e.date.startsWith(thisMonth))
-    .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    .reduce((s, e) => s + (Number(e.amount) || 0), 0) + fixedCostMonthSum;
   const allSum = entries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   document.getElementById('monthTotal').textContent = formatCurrency(monthSum);
