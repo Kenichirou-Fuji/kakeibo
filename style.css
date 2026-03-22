@@ -575,6 +575,18 @@ td { padding: 0.85rem 1rem; }
   cursor: pointer;
 }
 
+/* ── 入金額ページの固定費アイテム ── */
+.deposit-item-fixed {
+  background: #faf5ff;
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin-bottom: 2px;
+}
+
+.deposit-item-fixed .deposit-item-date {
+  color: #6b46c1;
+}
+
 /* ── 固定費バッジ・行 ── */
 .badge-fixed {
   background: #e9d8fd;

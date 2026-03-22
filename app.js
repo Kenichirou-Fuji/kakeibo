@@ -316,14 +316,19 @@ function renderDeposit() {
     recommendedDeposit
   );
 
+  const fixedFamilyPersonalItems = cachedFixedCosts.filter(e => e.wallet === 'family' && e.purpose === 'personal');
+  const fixedPersonalFamilyItems = cachedFixedCosts.filter(e => e.wallet === 'personal' && e.purpose === 'family');
+
   renderDepositDetailList(
     'depositFamilyPersonalList',
     familyPersonalEntries,
+    fixedFamilyPersonalItems,
     'この月は、共有財布で払った個人用の支出はありません。'
   );
   renderDepositDetailList(
     'depositPersonalFamilyList',
     personalFamilyEntries,
+    fixedPersonalFamilyItems,
     'この月は、私の財布で払った家族用の支出はありません。'
   );
 }
@@ -398,16 +403,26 @@ function buildDepositCompletedMeta(monthlyDepositStatus, recommendedDeposit) {
   return `入金済み (${formatCurrency(amountAtCheck)} / ${checkedAtLabel})`;
 }
 
-function renderDepositDetailList(containerId, entries, emptyMessage) {
+function renderDepositDetailList(containerId, entries, fixedEntries, emptyMessage) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  if (entries.length === 0) {
+  if (entries.length === 0 && fixedEntries.length === 0) {
     container.innerHTML = `<div class="deposit-empty">${emptyMessage}</div>`;
     return;
   }
 
-  container.innerHTML = entries.map(entry => `
+  const fixedHtml = fixedEntries.map(entry => `
+    <div class="deposit-item deposit-item-fixed">
+      <div>
+        <div class="deposit-item-date">🔄 固定費</div>
+        <div class="deposit-item-memo">${entry.name}</div>
+      </div>
+      <div class="deposit-item-amount">${formatCurrency(entry.amount)}</div>
+    </div>
+  `).join('');
+
+  const variableHtml = entries.map(entry => `
     <div class="deposit-item">
       <div>
         <div class="deposit-item-date">${formatDate(entry.date)}</div>
@@ -416,6 +431,8 @@ function renderDepositDetailList(containerId, entries, emptyMessage) {
       <div class="deposit-item-amount">${formatCurrency(entry.amount)}</div>
     </div>
   `).join('');
+
+  container.innerHTML = fixedHtml + variableHtml;
 }
 
 // ── 固定費 ──
