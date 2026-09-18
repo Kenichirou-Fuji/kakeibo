@@ -293,6 +293,7 @@ function switchTab(tab, btn) {
   btn.classList.add('active');
   if (tab === 'view') renderView();
   if (tab === 'deposit') renderDeposit();
+  if (tab === 'trend') renderTrend();
 }
 
 // ── 登録 ──
@@ -406,6 +407,7 @@ function renderView() {
   renderFixedCosts();
   renderDeposit();
   renderAlerts();
+  renderTrend();
 }
 
 // ── 必須項目の未入力チェック ──
@@ -1126,6 +1128,301 @@ async function onDepositCheckedChange(person, checkbox) {
     checkbox.disabled = false;
   }
 }
+
+// ── 推移（月ごとの収益の折れ線グラフ） ──
+const trendState = { range: 6 };
+const TREND_SERIES = [
+  { key: 'profit', label: '収益', color: '#2a78d6' },
+  { key: 'profitExSaving', label: '収益（貯蓄除く）', color: '#eb6834' },
+];
+const CHART_INK = { primary: '#0b0b0b', secondary: '#52514e', muted: '#898781', grid: '#e1e0d9', axis: '#c3c2b7', surface: '#ffffff' };
+
+function setTrendRange(range) {
+  trendState.range = range;
+  document.querySelectorAll('#trendRangeChips .chip').forEach((chip, i) => {
+    chip.classList.toggle('active', [6, 12, 'all'][i] === range);
+  });
+  renderTrend();
+}
+
+// 最初の登録月から今月までを連続した月リストにする
+function trendMonths() {
+  const current = currentMonth();
+  const entryMonths = cachedEntries
+    .map(e => (typeof e.date === 'string' ? e.date.slice(0, 7) : null))
+    .filter(Boolean);
+  let start = entryMonths.length ? entryMonths.reduce((a, b) => (a < b ? a : b)) : current;
+  if (start > current) start = current;
+  const months = [];
+  for (let m = start; m <= current; m = addMonths(m, 1)) months.push(m);
+  if (trendState.range !== 'all') return months.slice(-trendState.range);
+  return months;
+}
+
+function trendData() {
+  return trendMonths().map(month => ({ month, ...calcHousehold(month) }));
+}
+
+function niceStep(rawStep) {
+  const pow = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const n = rawStep / pow;
+  const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+  return nice * pow;
+}
+
+function formatAxisYen(v) {
+  if (v === 0) return '0';
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '−' : '';
+  if (abs >= 10000) {
+    const man = abs / 10000;
+    return `${sign}${Number.isInteger(man) ? man : man.toFixed(1)}万`;
+  }
+  return `${sign}${abs.toLocaleString()}`;
+}
+
+function formatSignedYen(v) {
+  return (v < 0 ? '−' : '') + '¥' + Math.abs(v).toLocaleString();
+}
+
+function renderTrend() {
+  const chartEl = document.getElementById('trendChart');
+  if (!chartEl) return;
+  const data = trendData();
+
+  // サマリー
+  const profits = data.map(d => d.profit);
+  const sum = profits.reduce((s, v) => s + v, 0);
+  const avg = profits.length ? Math.round(sum / profits.length) : 0;
+  const latest = data[data.length - 1];
+  setSigned('trendAvgProfit', avg);
+  setSigned('trendSumProfit', sum);
+  setSigned('trendLatestProfit', latest ? latest.profit : 0);
+  document.getElementById('trendLatestLabel').textContent = latest ? `${formatMonthLabel(latest.month)}の収益` : '今月の収益';
+
+  // 凡例（2系列なので必ず表示）
+  const legend = document.getElementById('trendLegend');
+  legend.innerHTML = '';
+  TREND_SERIES.forEach(s => {
+    const item = document.createElement('span');
+    item.className = 'legend-item';
+    const key = document.createElement('span');
+    key.className = 'legend-key';
+    key.style.background = s.color;
+    item.appendChild(key);
+    item.appendChild(document.createTextNode(s.label));
+    legend.appendChild(item);
+  });
+
+  renderTrendChart(chartEl, data);
+  renderTrendTable(data);
+}
+
+function setSigned(id, value) {
+  const el = document.getElementById(id);
+  el.textContent = formatSignedYen(value);
+  el.classList.toggle('negative', value < 0);
+}
+
+function renderTrendChart(container, data) {
+  container.innerHTML = '';
+  const tooltip = document.getElementById('trendTooltip');
+  tooltip.hidden = true;
+  if (data.length === 0) {
+    container.innerHTML = '<div class="empty-state">データがありません</div>';
+    return;
+  }
+
+  const width = Math.max(320, container.clientWidth || 600);
+  const height = 300;
+  const margin = { top: 16, right: 110, bottom: 36, left: 56 };
+  const compact = width < 480;
+  if (compact) { margin.right = 16; margin.left = 48; }
+  const plotW = width - margin.left - margin.right;
+  const plotH = height - margin.top - margin.bottom;
+
+  // スケール
+  const values = data.flatMap(d => TREND_SERIES.map(s => d[s.key]));
+  let minV = Math.min(0, ...values);
+  let maxV = Math.max(0, ...values);
+  if (minV === maxV) { maxV = minV + 10000; }
+  const step = niceStep((maxV - minV) / 5);
+  minV = Math.floor(minV / step) * step;
+  maxV = Math.ceil(maxV / step) * step;
+  const n = data.length;
+  const x = i => margin.left + (n === 1 ? plotW / 2 : (plotW * i) / (n - 1));
+  const y = v => margin.top + plotH - ((v - minV) / (maxV - minV)) * plotH;
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', height);
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', '月ごとの収益の推移');
+  const el = (name, attrs) => {
+    const node = document.createElementNS(svgNS, name);
+    Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+    return node;
+  };
+
+  // グリッドと Y 軸ラベル
+  for (let v = minV; v <= maxV + step / 2; v += step) {
+    const gy = y(v);
+    svg.appendChild(el('line', {
+      x1: margin.left, x2: margin.left + plotW, y1: gy, y2: gy,
+      stroke: v === 0 ? CHART_INK.axis : CHART_INK.grid, 'stroke-width': 1,
+    }));
+    const t = el('text', { x: margin.left - 8, y: gy + 4, 'text-anchor': 'end', fill: CHART_INK.muted, 'font-size': 11, class: 'axis-text' });
+    t.textContent = formatAxisYen(v);
+    svg.appendChild(t);
+  }
+
+  // X 軸ラベル（重ならない間隔で）
+  const every = Math.max(1, Math.ceil(n / (compact ? 4 : 8)));
+  data.forEach((d, i) => {
+    if (i % every !== 0 && i !== n - 1) return;
+    const [yy, mm] = d.month.split('-');
+    const label = (i === 0 || mm === '01') ? `${yy}/${Number(mm)}` : `${Number(mm)}月`;
+    const t = el('text', { x: x(i), y: height - 12, 'text-anchor': 'middle', fill: CHART_INK.muted, 'font-size': 11 });
+    t.textContent = label;
+    svg.appendChild(t);
+  });
+
+  // 折れ線（2px）とマーカー（r4 + 白リング）
+  TREND_SERIES.forEach(s => {
+    const points = data.map((d, i) => `${x(i)},${y(d[s.key])}`).join(' ');
+    svg.appendChild(el('polyline', {
+      points, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+    }));
+    data.forEach((d, i) => {
+      svg.appendChild(el('circle', { cx: x(i), cy: y(d[s.key]), r: 4, fill: s.color, stroke: CHART_INK.surface, 'stroke-width': 2 }));
+    });
+  });
+
+  // 終端の直接ラベル（重なるときは上下にずらしてリーダー線）
+  if (!compact) {
+    const last = data[n - 1];
+    const labels = TREND_SERIES.map(s => ({ s, py: y(last[s.key]), ly: y(last[s.key]) }))
+      .sort((a, b) => a.py - b.py);
+    for (let i = 1; i < labels.length; i++) {
+      if (labels[i].ly - labels[i - 1].ly < 16) labels[i].ly = labels[i - 1].ly + 16;
+    }
+    labels.forEach(({ s, py, ly }) => {
+      const lx = x(n - 1) + 10;
+      if (Math.abs(ly - py) > 1) {
+        svg.appendChild(el('line', { x1: x(n - 1) + 6, y1: py, x2: lx - 2, y2: ly, stroke: CHART_INK.axis, 'stroke-width': 1 }));
+      }
+      const t = el('text', { x: lx, y: ly + 4, fill: CHART_INK.primary, 'font-size': 12, 'font-weight': 700, class: 'axis-text' });
+      t.textContent = formatSignedYen(last[s.key]);
+      svg.appendChild(t);
+      const sub = el('text', { x: lx, y: ly + 4, dx: 0, dy: 13, fill: CHART_INK.secondary, 'font-size': 10 });
+      sub.textContent = s.label;
+      svg.appendChild(sub);
+    });
+  }
+
+  // クロスヘア＋ツールチップ
+  const crosshair = el('line', { x1: 0, x2: 0, y1: margin.top, y2: margin.top + plotH, stroke: CHART_INK.axis, 'stroke-width': 1, visibility: 'hidden' });
+  svg.appendChild(crosshair);
+  const hit = el('rect', { x: margin.left - 12, y: 0, width: plotW + 24, height, fill: 'transparent', style: 'cursor: crosshair' });
+  svg.appendChild(hit);
+
+  const showAt = i => {
+    const d = data[i];
+    crosshair.setAttribute('x1', x(i));
+    crosshair.setAttribute('x2', x(i));
+    crosshair.setAttribute('visibility', 'visible');
+
+    tooltip.innerHTML = '';
+    const title = document.createElement('div');
+    title.className = 'tt-title';
+    title.textContent = formatMonthLabel(d.month);
+    tooltip.appendChild(title);
+    TREND_SERIES.forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'tt-row';
+      const key = document.createElement('span');
+      key.className = 'legend-key';
+      key.style.background = s.color;
+      const val = document.createElement('strong');
+      val.textContent = formatSignedYen(d[s.key]);
+      const name = document.createElement('span');
+      name.className = 'tt-name';
+      name.textContent = s.label;
+      row.appendChild(key); row.appendChild(val); row.appendChild(name);
+      tooltip.appendChild(row);
+    });
+    const sub = document.createElement('div');
+    sub.className = 'tt-sub';
+    sub.textContent = `収入 ${formatCurrency(d.income)} / 支出 ${formatCurrency(d.expense)} / 貯蓄 ${formatCurrency(d.saving)}`;
+    tooltip.appendChild(sub);
+
+    tooltip.hidden = false;
+    const rect = container.getBoundingClientRect();
+    const scale = rect.width / width;
+    const px = x(i) * scale;
+    const ttW = tooltip.offsetWidth;
+    const left = px + 12 + ttW > rect.width ? px - 12 - ttW : px + 12;
+    tooltip.style.left = `${Math.max(0, left)}px`;
+    tooltip.style.top = `${margin.top * scale}px`;
+  };
+  const hide = () => { crosshair.setAttribute('visibility', 'hidden'); tooltip.hidden = true; };
+
+  hit.addEventListener('pointermove', e => {
+    const rect = svg.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * width;
+    let best = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < n; i++) {
+      const dist = Math.abs(x(i) - px);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    }
+    showAt(best);
+  });
+  hit.addEventListener('pointerleave', hide);
+  hit.addEventListener('click', e => {
+    // タップ操作（スマホ）でも同じ表示にする
+    const rect = svg.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * width;
+    let best = 0; let bestDist = Infinity;
+    for (let i = 0; i < n; i++) { const dist = Math.abs(x(i) - px); if (dist < bestDist) { bestDist = dist; best = i; } }
+    showAt(best);
+  });
+
+  container.appendChild(svg);
+}
+
+function renderTrendTable(data) {
+  const tbody = document.getElementById('trendTableBody');
+  tbody.innerHTML = '';
+  data.slice().reverse().forEach(d => {
+    const tr = document.createElement('tr');
+    const cells = [
+      [formatMonthLabel(d.month), ''],
+      [formatCurrency(d.income), 'num'],
+      [formatCurrency(d.expense), 'num'],
+      [formatCurrency(d.saving), 'num'],
+      [formatSignedYen(d.profit), 'num' + (d.profit < 0 ? ' negative' : '')],
+      [formatSignedYen(d.profitExSaving), 'num' + (d.profitExSaving < 0 ? ' negative' : '')],
+    ];
+    cells.forEach(([text, cls]) => {
+      const td = document.createElement('td');
+      td.textContent = text;
+      if (cls) td.className = cls;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+let trendResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(trendResizeTimer);
+  trendResizeTimer = setTimeout(() => {
+    if (document.getElementById('page-trend').classList.contains('active')) renderTrend();
+  }, 150);
+});
 
 // ── トースト ──
 let toastTimer = null;

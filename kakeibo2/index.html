@@ -14,6 +14,7 @@
   <button class="active" data-tab="register" onclick="switchTab('register', this)">📝 登録</button>
   <button data-tab="view" onclick="switchTab('view', this)">📋 閲覧</button>
   <button data-tab="deposit" onclick="switchTab('deposit', this)">🏦 入金額</button>
+  <button data-tab="trend" onclick="switchTab('trend', this)">📈 推移</button>
 </nav>
 
 <!-- ── 登録画面 ── -->
@@ -155,6 +156,61 @@
   <div id="householdCard" class="household-card"></div>
 
   <div id="depositCards"></div>
+</div>
+
+<!-- ── 推移画面 ── -->
+<div id="page-trend" class="page">
+  <div class="chips trend-filters" id="trendRangeChips">
+    <button type="button" class="chip active" onclick="setTrendRange(6)">直近6ヶ月</button>
+    <button type="button" class="chip" onclick="setTrendRange(12)">直近12ヶ月</button>
+    <button type="button" class="chip" onclick="setTrendRange('all')">全期間</button>
+  </div>
+
+  <div class="summary">
+    <div class="summary-box">
+      <div class="label">月平均の収益</div>
+      <div class="amount" id="trendAvgProfit">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label">期間の累計収益</div>
+      <div class="amount" id="trendSumProfit">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label" id="trendLatestLabel">今月の収益</div>
+      <div class="amount" id="trendLatestProfit">¥0</div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <span class="chart-title">月ごとの収益の推移</span>
+      <div class="chart-legend" id="trendLegend"></div>
+    </div>
+    <div class="chart-wrap">
+      <div id="trendChart" class="chart"></div>
+      <div id="trendTooltip" class="chart-tooltip" hidden></div>
+    </div>
+    <p class="chart-note">収入は現在の設定値（けん・こなみの月収）を各月に当てています。支出には固定費を含みます。</p>
+  </div>
+
+  <div class="list-card">
+    <div class="list-header">月ごとの内訳</div>
+    <div class="table-scroll">
+      <table id="trendTable" class="trend-table">
+        <thead>
+          <tr>
+            <th>月</th>
+            <th class="num">収入</th>
+            <th class="num">支出</th>
+            <th class="num">うち貯蓄</th>
+            <th class="num">収益</th>
+            <th class="num">収益（貯蓄除く）</th>
+          </tr>
+        </thead>
+        <tbody id="trendTableBody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- ── 編集モーダル ── -->

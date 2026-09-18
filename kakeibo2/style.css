@@ -579,6 +579,51 @@ td { padding: 0.8rem 1rem; vertical-align: middle; }
 .household-cell.main .value.negative { color: #c53030; }
 .household-note { color: #718096; font-size: 0.8rem; margin-top: 0.75rem; line-height: 1.6; }
 
+/* ── 推移グラフ ── */
+.trend-filters { margin-bottom: 1rem; }
+.summary-box .amount.negative { color: #c53030; }
+
+.chart-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  padding: 1rem 1rem 0.75rem;
+  margin-bottom: 1rem;
+}
+.chart-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.chart-title { font-weight: 700; color: #4a5568; }
+.chart-legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.85rem; color: #52514e; }
+.legend-item { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend-key { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+.chart-wrap { position: relative; }
+.chart svg { display: block; font-family: inherit; }
+.chart .axis-text { font-variant-numeric: tabular-nums; }
+.chart-note { color: #898781; font-size: 0.78rem; margin-top: 0.5rem; line-height: 1.6; }
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  background: white;
+  border: 1px solid rgba(11,11,11,0.10);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  padding: 0.6rem 0.75rem;
+  pointer-events: none;
+  min-width: 180px;
+  font-size: 0.85rem;
+}
+.chart-tooltip[hidden] { display: none; }
+.tt-title { font-weight: 700; color: #0b0b0b; margin-bottom: 0.3rem; }
+.tt-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.1rem 0; }
+.tt-row strong { color: #0b0b0b; font-variant-numeric: tabular-nums; }
+.tt-name { color: #52514e; font-size: 0.8rem; }
+.tt-sub { color: #898781; font-size: 0.75rem; margin-top: 0.35rem; border-top: 1px solid #e1e0d9; padding-top: 0.35rem; }
+
+.table-scroll { overflow-x: auto; }
+.trend-table { min-width: 560px; }
+.trend-table th.num, .trend-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.trend-table td.negative { color: #c53030; font-weight: 700; }
+
 /* ── モーダル ── */
 .modal-overlay {
   display: none;
