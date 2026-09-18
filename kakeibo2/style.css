@@ -171,6 +171,40 @@ input:focus, select:focus {
 .btn-primary:hover { opacity: 0.9; }
 .btn-primary:active { transform: scale(0.99); }
 
+/* ── 毎月の必須項目の直接入力 ── */
+.utilities-card { margin-top: 1rem; }
+.utilities-head { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem; }
+.utilities-head .form-group { min-width: 180px; }
+.utilities-head .placeholder-text { flex: 1; font-size: 0.85rem; min-width: 200px; }
+.utility-rows { display: flex; flex-direction: column; }
+.utility-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(220px, 1.2fr);
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.8rem 0;
+  border-top: 1px solid #edf2f7;
+}
+.utility-row:first-child { border-top: none; }
+.utility-row.is-done { background: #f0fdf4; margin: 0 -0.5rem; padding-left: 0.5rem; padding-right: 0.5rem; border-radius: 8px; }
+.utility-name { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.utility-label { font-weight: 700; font-size: 1.05rem; }
+.badge-done { background: #dcfce7; color: #166534; }
+.utility-input { display: flex; gap: 0.5rem; }
+.utility-input input { flex: 1; min-width: 0; }
+.btn-utility {
+  padding: 0.65rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #0ea5a4, #2563eb);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-utility.is-update { background: #ebf8ff; color: #2b6cb0; }
+.btn-utility:hover { opacity: 0.9; }
+
 /* ── トースト ── */
 .toast {
   position: fixed;
@@ -761,6 +795,8 @@ td { padding: 0.8rem 1rem; vertical-align: middle; }
   .deposit-detail-grid { grid-template-columns: 1fr; }
   .deposit-card { padding: 1rem; }
   .household-card { padding: 1rem; }
+  .utility-row { grid-template-columns: 1fr; gap: 0.5rem; }
+  .utilities-head .form-group { width: 100%; }
   .household-incomes { grid-template-columns: 1fr; }
   .household-grid { grid-template-columns: 1fr 1fr; }
   .household-cell.main { grid-column: 1 / -1; }

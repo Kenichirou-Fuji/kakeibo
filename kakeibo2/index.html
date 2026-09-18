@@ -52,6 +52,19 @@
       <button type="submit" class="btn-primary">＋ 登録する</button>
     </form>
   </div>
+
+  <!-- 毎月の必須項目（電気・ガス・水道）を直接入力 -->
+  <div class="card utilities-card">
+    <h2 id="utilitiesTitle">毎月の必須項目</h2>
+    <div class="utilities-head">
+      <div class="form-group">
+        <label for="utilityDate">📅 日付</label>
+        <input type="date" id="utilityDate" />
+      </div>
+      <p class="placeholder-text">家族カテゴリ・家族財布で登録されます。同じ月に入力済みなら金額を更新します。</p>
+    </div>
+    <div id="utilityRows" class="utility-rows"></div>
+  </div>
 </div>
 
 <!-- ── 閲覧画面 ── -->

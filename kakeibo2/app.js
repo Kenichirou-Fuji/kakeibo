@@ -181,8 +181,11 @@ document.addEventListener('DOMContentLoaded', () => {
   fillSelect(document.getElementById('fixedCostWallet'), WALLET_ORDER, WALLETS);
 
   resetRegisterForm();
+  document.getElementById('utilityDate').value = today();
+  document.getElementById('utilityDate').addEventListener('change', renderUtilities);
+
   document.getElementById('category').addEventListener('change', e => {
-    fillItemSelect(document.getElementById('item'), e.target.value);
+    fillItemSelect(document.getElementById('item'), e.target.value, undefined, true);
     // カテゴリに合わせて財布の初期値も切り替える（手動で変更可）
     document.getElementById('wallet').value = DEFAULT_WALLET_FOR_CATEGORY[e.target.value] || 'family';
     applyWalletLock('category', 'item', 'wallet');
@@ -231,8 +234,9 @@ function fillSelect(select, order, labels) {
   select.innerHTML = order.map(key => `<option value="${key}">${labels[key]}</option>`).join('');
 }
 
-function fillItemSelect(select, category, selected) {
-  const items = [...(ITEMS[category] || [])];
+function fillItemSelect(select, category, selected, excludeRequired = false) {
+  let items = [...(ITEMS[category] || [])];
+  if (excludeRequired) items = items.filter(name => !isRequiredItem(category, name));
   if (selected && !items.includes(selected)) items.push(selected);
   select.innerHTML = items.map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join('');
   if (selected) select.value = selected;
@@ -242,9 +246,87 @@ function resetRegisterForm() {
   document.getElementById('registerForm').reset();
   document.getElementById('date').value = today();
   document.getElementById('category').value = 'family';
-  fillItemSelect(document.getElementById('item'), 'family');
+  fillItemSelect(document.getElementById('item'), 'family', undefined, true);
   document.getElementById('wallet').value = DEFAULT_WALLET_FOR_CATEGORY.family;
   applyWalletLock('category', 'item', 'wallet');
+}
+
+// ── 毎月の必須項目（電気・ガス・水道）の直接入力 ──
+function requiredItemList() {
+  return Object.entries(REQUIRED_ITEMS).flatMap(([category, items]) => items.map(item => ({ category, item })));
+}
+
+function findRequiredEntry(month, category, item) {
+  return entriesForMonth(month).find(e => e.category === category && e.item === item) || null;
+}
+
+function renderUtilities() {
+  const container = document.getElementById('utilityRows');
+  if (!container) return;
+  const list = requiredItemList();
+  document.getElementById('utilitiesTitle').textContent =
+    `毎月の必須項目（${list.map(r => r.item).join('・')}）`;
+
+  const date = document.getElementById('utilityDate').value || today();
+  const month = date.slice(0, 7);
+
+  // 入力途中の値（自動で埋めた既存金額とは別）は再描画後も残す
+  const typed = {};
+  container.querySelectorAll('input[data-key]').forEach(inp => {
+    if (inp.value !== '' && inp.value !== inp.dataset.prefill) typed[inp.dataset.key] = inp.value;
+  });
+
+  container.innerHTML = list.map(({ category, item }) => {
+    const key = `${category}|${item}`;
+    const existing = findRequiredEntry(month, category, item);
+    const prefill = existing ? String(existing.amount) : '';
+    const value = typed[key] !== undefined ? typed[key] : prefill;
+    return `
+      <div class="utility-row${existing ? ' is-done' : ''}">
+        <div class="utility-name">
+          <span class="utility-label">${escapeHtml(item)}</span>
+          ${existing
+            ? `<span class="badge badge-done">${formatMonthLabel(month)} 入力済み ${formatCurrency(existing.amount)}</span>`
+            : `<span class="badge badge-required">${formatMonthLabel(month)} 未入力</span>`}
+        </div>
+        <div class="utility-input">
+          <input type="number" min="0" inputmode="numeric" placeholder="金額（円）"
+            data-key="${escapeAttr(key)}" data-prefill="${escapeAttr(prefill)}" value="${escapeAttr(value)}"
+            onkeydown="if (event.key === 'Enter') { event.preventDefault(); saveUtility('${category}', ${JSON.stringify(item).replace(/"/g, '&quot;')}); }" />
+          <button type="button" class="btn-utility${existing ? ' is-update' : ''}"
+            onclick="saveUtility('${category}', ${JSON.stringify(item).replace(/"/g, '&quot;')})">${existing ? '更新' : '登録'}</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function saveUtility(category, item) {
+  const key = `${category}|${item}`;
+  const input = document.querySelector(`#utilityRows input[data-key="${key.replace(/"/g, '\\"')}"]`);
+  const amount = parseInt(input ? input.value : '', 10);
+  const date = document.getElementById('utilityDate').value || today();
+  if (!Number.isFinite(amount) || amount < 0) { alert(`${item}の金額を入力してください`); return; }
+
+  const month = date.slice(0, 7);
+  const existing = findRequiredEntry(month, category, item);
+  const wallet = lockedWalletFor(category, item) || DEFAULT_WALLET_FOR_CATEGORY[category] || 'family';
+
+  try {
+    if (existing) {
+      await db.collection(COL_ENTRIES).doc(existing.id).update({ amount, date, wallet });
+      showToast(`${item}を${formatCurrency(amount)}に更新しました`);
+    } else {
+      await db.collection(COL_ENTRIES).add({
+        date, amount, category, item, wallet, memo: '',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      showToast(`${item} ${formatCurrency(amount)}を登録しました`);
+    }
+    if (input) input.value = '';
+  } catch (err) {
+    console.error(err);
+    showToast(`⚠️ ${item}の保存に失敗しました`);
+  }
 }
 
 // ── 日付ユーティリティ ──
@@ -408,6 +490,7 @@ function renderView() {
   renderDeposit();
   renderAlerts();
   renderTrend();
+  renderUtilities();
 }
 
 // ── 必須項目の未入力チェック ──
