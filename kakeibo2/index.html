@@ -220,6 +220,25 @@
   </div>
 </div>
 
+<!-- ── 上限（予算）モーダル ── -->
+<div class="modal-overlay" id="budgetModal">
+  <div class="modal">
+    <h2 id="budgetModalTitle">📊 月の上限</h2>
+    <p class="placeholder-text" style="margin-bottom:1rem;">上限の80%に達すると注意、超えると超過として警告します。</p>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label for="budgetAmount">月の上限（円）</label>
+        <input type="number" id="budgetAmount" min="1" step="1000" inputmode="numeric" placeholder="30000" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeBudgetModal()">キャンセル</button>
+      <button class="btn-cancel btn-clear" id="budgetClearBtn" onclick="saveBudget(true)">上限を解除</button>
+      <button class="btn-save" onclick="saveBudget()">保存する</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- Firebase SDK (compat版) — 既存アプリと同じ設定ファイルを共有 -->

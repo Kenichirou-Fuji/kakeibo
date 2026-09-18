@@ -56,6 +56,8 @@ const DEFAULT_FIXED_COSTS = [
 const DEPOSIT_PERSONS = ['ken', 'konami'];
 const DEFAULT_BASE_DEPOSIT = { ken: 180000, konami: 80000 };
 const META_DEPOSIT_SETTINGS_DOC = 'depositSettings';   // kakeibo2_meta/depositSettings { baseAmounts: {ken, konami} }
+const META_BUDGETS_DOC = 'budgets';                     // kakeibo2_meta/budgets { items: { "family|食費": 30000, ... } }
+const BUDGET_WARN_RATIO = 0.8;                          // 上限のこの割合に達したら注意
 const DEPOSIT_STATUS_PREFIX = 'deposit-';               // kakeibo2_meta/deposit-YYYY-MM-<person>
 
 // ── 状態 ──
@@ -63,6 +65,8 @@ let cachedEntries = [];
 let cachedFixedCosts = [];
 let cachedDepositStatus = {};     // key: `${month}-${person}` → doc
 let cachedBaseAmounts = { ...DEFAULT_BASE_DEPOSIT };
+let cachedBudgets = {};           // key: `${category}|${item}` → 月の上限（円）
+let editingBudget = null;         // { category, item }
 const depositState = { month: currentMonth() };
 let editingId = null;
 let editingFixedCostId = null;
@@ -113,17 +117,21 @@ firebase.auth().onAuthStateChanged(user => {
     snapshot => {
       const status = {};
       let base = { ...DEFAULT_BASE_DEPOSIT };
+      let budgets = {};
       snapshot.docs.forEach(doc => {
         const data = doc.data();
         if (doc.id === META_DEPOSIT_SETTINGS_DOC) {
           base = { ...base, ...(data.baseAmounts || {}) };
+        } else if (doc.id === META_BUDGETS_DOC) {
+          budgets = { ...(data.items || {}) };
         } else if (doc.id.startsWith(DEPOSIT_STATUS_PREFIX)) {
           status[doc.id.slice(DEPOSIT_STATUS_PREFIX.length)] = { id: doc.id, ...data };
         }
       });
       cachedDepositStatus = status;
       cachedBaseAmounts = base;
-      renderDeposit();
+      cachedBudgets = budgets;
+      renderView();
     },
     err => {
       console.error('Firestore 同期エラー (meta):', err);
@@ -186,6 +194,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('fixedCostModal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeFixedCostModal();
+  });
+  document.getElementById('budgetModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeBudgetModal();
   });
 
   renderView();
@@ -399,23 +410,100 @@ function isRequiredItem(category, item) {
   return (REQUIRED_ITEMS[category] || []).includes(item);
 }
 
-function renderAlertInto(elementId, month) {
+function buildMissingAlertHtml(month) {
+  const missing = missingRequiredItems(month);
+  if (missing.length === 0) return '';
+  return `<div class="alert-line">⚠️ <strong>${formatMonthLabel(month)}</strong> の未入力: `
+    + missing.map(m => `<span class="alert-item">${escapeHtml(m.item)}</span>`).join('') + '</div>';
+}
+
+function buildBudgetAlertHtml(month) {
+  const warnings = budgetWarnings(month);
+  if (warnings.length === 0) return '';
+  return `<div class="alert-line">💸 <strong>${formatMonthLabel(month)}</strong> の上限: `
+    + warnings.map(w => {
+      const label = `${CATEGORIES[w.category]}・${w.item}`;
+      const detail = w.level === 'over'
+        ? `${formatCurrency(w.spent - w.budget)}超過`
+        : `残り${formatCurrency(w.budget - w.spent)}（${Math.round(w.ratio * 100)}%）`;
+      return `<span class="alert-item alert-${w.level}">${escapeHtml(label)} ${detail}</span>`;
+    }).join('') + '</div>';
+}
+
+function renderAlertInto(elementId, html) {
   const el = document.getElementById(elementId);
   if (!el) return;
-  const missing = missingRequiredItems(month);
-  if (missing.length === 0) {
-    el.style.display = 'none';
-    el.innerHTML = '';
-    return;
-  }
-  el.style.display = '';
-  el.innerHTML = `⚠️ <strong>${formatMonthLabel(month)}</strong> の未入力: `
-    + missing.map(m => `<span class="alert-item">${escapeHtml(m.item)}</span>`).join('');
+  el.style.display = html ? '' : 'none';
+  el.innerHTML = html;
 }
 
 function renderAlerts() {
-  renderAlertInto('registerAlert', currentMonth());
-  renderAlertInto('viewAlert', viewState.month);
+  const thisMonth = currentMonth();
+  renderAlertInto('registerAlert', buildMissingAlertHtml(thisMonth) + buildBudgetAlertHtml(thisMonth));
+  renderAlertInto('viewAlert', buildMissingAlertHtml(viewState.month));
+}
+
+// ── 項目ごとの上限（予算） ──
+function budgetKey(category, item) { return `${category}|${item}`; }
+
+function getBudget(category, item) {
+  const v = Number(cachedBudgets[budgetKey(category, item)]);
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+// その月・項目の使用状況。上限未設定なら null
+function budgetStatus(month, category, item) {
+  const budget = getBudget(category, item);
+  if (!budget) return null;
+  const spent = sumAmount(combinedForMonth(month).filter(e => e.category === category && e.item === item));
+  const ratio = spent / budget;
+  const level = ratio >= 1 ? 'over' : ratio >= BUDGET_WARN_RATIO ? 'warn' : 'ok';
+  return { budget, spent, ratio, level, category, item };
+}
+
+function budgetWarnings(month) {
+  return Object.keys(cachedBudgets)
+    .map(key => {
+      const [category, item] = key.split('|');
+      return budgetStatus(month, category, item);
+    })
+    .filter(s => s && s.level !== 'ok')
+    .sort((a, b) => b.ratio - a.ratio);
+}
+
+function openBudgetModal(category, item) {
+  editingBudget = { category, item };
+  const current = getBudget(category, item);
+  document.getElementById('budgetModalTitle').textContent = `📊 ${CATEGORIES[category]}・${item} の月の上限`;
+  document.getElementById('budgetAmount').value = current ?? '';
+  document.getElementById('budgetClearBtn').style.display = current ? '' : 'none';
+  document.getElementById('budgetModal').classList.add('open');
+  document.getElementById('budgetAmount').focus();
+}
+
+function closeBudgetModal() {
+  document.getElementById('budgetModal').classList.remove('open');
+  editingBudget = null;
+}
+
+async function saveBudget(clear = false) {
+  if (!editingBudget) return;
+  const { category, item } = editingBudget;
+  const key = budgetKey(category, item);
+  const amount = parseInt(document.getElementById('budgetAmount').value, 10);
+  if (!clear && (!Number.isFinite(amount) || amount <= 0)) { alert('1円以上の金額を入力してください'); return; }
+
+  try {
+    await db.collection(COL_META).doc(META_BUDGETS_DOC).set({
+      items: { [key]: clear ? firebase.firestore.FieldValue.delete() : amount },
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    showToast(clear ? `${item}の上限を解除しました` : `${item}の上限を${formatCurrency(amount)}にしました`);
+    closeBudgetModal();
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 上限の保存に失敗しました');
+  }
 }
 
 function renderMonthSelect() {
@@ -468,13 +556,17 @@ function renderBreakdown() {
     totalEl.textContent = formatCurrency(sumAmount(monthList));
     list.innerHTML = CATEGORY_ORDER.map(key => {
       const rows = monthList.filter(e => e.category === key);
+      const warnCount = budgetWarnings(viewState.month).filter(w => w.category === key).length;
       return `
-        <button type="button" class="breakdown-row" onclick="setCategory('${key}')">
-          <span class="breakdown-name"><span class="badge badge-${key}">${CATEGORIES[key]}</span></span>
+        <div class="breakdown-row" role="button" tabindex="0" onclick="setCategory('${key}')">
+          <span class="breakdown-name">
+            <span class="badge badge-${key}">${CATEGORIES[key]}</span>
+            ${warnCount ? `<span class="badge badge-over">上限注意 ${warnCount}</span>` : ''}
+          </span>
           <span class="breakdown-count">${rows.length}件</span>
           <span class="breakdown-amount">${formatCurrency(sumAmount(rows))}</span>
           <span class="breakdown-arrow">›</span>
-        </button>`;
+        </div>`;
     }).join('');
     return;
   }
@@ -496,14 +588,36 @@ function renderBreakdown() {
     const isRequired = isRequiredItem(viewState.category, name);
     const isMissing = isRequired && rows.length === 0;
     const active = viewState.item === name;
+    const bs = budgetStatus(viewState.month, viewState.category, name);
+    const nameArg = JSON.stringify(name).replace(/"/g, '&quot;');
+    const catArg = JSON.stringify(viewState.category).replace(/"/g, '&quot;');
+
+    let budgetHtml = '';
+    if (bs) {
+      const pct = Math.min(100, Math.round(bs.ratio * 100));
+      const label = bs.level === 'over'
+        ? `${formatCurrency(bs.spent - bs.budget)} 超過`
+        : `残り ${formatCurrency(bs.budget - bs.spent)}`;
+      budgetHtml = `
+        <div class="budget-bar-wrap">
+          <div class="budget-bar"><div class="budget-bar-fill level-${bs.level}" style="width:${pct}%"></div></div>
+          <div class="budget-text">${label} / 上限 ${formatCurrency(bs.budget)}（${Math.round(bs.ratio * 100)}%）</div>
+        </div>`;
+    }
+    const budgetBadge = bs && bs.level !== 'ok'
+      ? ` <span class="badge badge-${bs.level}">${bs.level === 'over' ? '超過' : '上限注意'}</span>` : '';
+
     return `
-      <button type="button" class="breakdown-row${active ? ' active' : ''}${isFixed ? ' is-fixed' : ''}${isMissing ? ' is-missing' : ''}"
-        onclick="setItem(${JSON.stringify(name).replace(/"/g, '&quot;')})">
-        <span class="breakdown-name">${escapeHtml(name)}${isFixed ? ' <span class="badge badge-fixed">固定</span>' : ''}${isRequired ? ` <span class="badge badge-required">${isMissing ? '未入力' : '必須'}</span>` : ''}</span>
+      <div class="breakdown-row${active ? ' active' : ''}${isFixed ? ' is-fixed' : ''}${isMissing ? ' is-missing' : ''}${bs ? ` has-budget budget-${bs.level}` : ''}"
+        role="button" tabindex="0" onclick="setItem(${nameArg})">
+        <span class="breakdown-name">${escapeHtml(name)}${isFixed ? ' <span class="badge badge-fixed">固定</span>' : ''}${isRequired ? ` <span class="badge badge-required">${isMissing ? '未入力' : '必須'}</span>` : ''}${budgetBadge}</span>
         <span class="breakdown-count">${rows.length}件</span>
         <span class="breakdown-amount">${formatCurrency(sumAmount(rows))}</span>
+        <button type="button" class="btn-budget" title="月の上限を設定"
+          onclick="event.stopPropagation(); openBudgetModal(${catArg}, ${nameArg})">${bs ? '📊' : '＋上限'}</button>
         <span class="breakdown-arrow">${active ? '✕' : '›'}</span>
-      </button>`;
+        ${budgetHtml}
+      </div>`;
   }).join('');
 
   list.innerHTML = rowsHtml || '<div class="breakdown-empty">項目がありません</div>';

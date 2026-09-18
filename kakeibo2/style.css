@@ -75,7 +75,35 @@ nav button:hover:not(.active) { background: #f7fafc; color: #4a5568; }
   margin: 0 0.2rem;
   font-weight: 700;
 }
+.alert-line + .alert-line { margin-top: 0.35rem; }
+.alert-item.alert-warn { background: #fef3c7; color: #92400e; }
+.alert-item.alert-over { background: #fee2e2; color: #b91c1c; }
 .badge-required { background: #ffedd5; color: #c2410c; }
+.badge-warn { background: #fef3c7; color: #92400e; }
+.badge-over { background: #fee2e2; color: #b91c1c; }
+
+/* ── 上限バー ── */
+.breakdown-row.has-budget { grid-template-rows: auto auto; }
+.budget-bar-wrap { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.6rem; margin-top: -0.2rem; }
+.budget-bar { flex: 1; height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+.budget-bar-fill { height: 100%; border-radius: 999px; background: #2563eb; transition: width 0.3s; }
+.budget-bar-fill.level-warn { background: #f59e0b; }
+.budget-bar-fill.level-over { background: #dc2626; }
+.budget-text { font-size: 0.75rem; color: #718096; white-space: nowrap; }
+.breakdown-row.budget-warn { background: #fffbeb; }
+.breakdown-row.budget-over { background: #fef2f2; }
+.btn-budget {
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #4a5568;
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-budget:hover { border-color: #2563eb; color: #2563eb; }
+.btn-clear { color: #c53030; }
 .breakdown-row.is-missing { background: #fff7ed; }
 .breakdown-row.is-missing .badge-required { background: #f97316; color: white; }
 select:disabled { background: #f1f5f9; color: #64748b; cursor: not-allowed; }
@@ -267,7 +295,7 @@ input:focus, select:focus {
 
 .breakdown-row {
   display: grid;
-  grid-template-columns: 1fr auto auto 1.2rem;
+  grid-template-columns: 1fr auto auto auto 1.2rem;
   align-items: center;
   gap: 0.75rem;
   width: 100%;
@@ -590,8 +618,9 @@ td { padding: 0.8rem 1rem; vertical-align: middle; }
   .summary-box .amount { font-size: 1rem; }
   .summary-box .label { font-size: 0.68rem; }
 
-  .breakdown-row { grid-template-columns: 1fr auto 1rem; }
+  .breakdown-row { grid-template-columns: 1fr auto auto 1rem; }
   .breakdown-count { display: none; }
+  .budget-text { white-space: normal; }
 
   #desktopTable { display: none; }
   .mobile-list { display: block; padding: 0.75rem; }
