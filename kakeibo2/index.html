@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>家計簿アプリ２</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>💰 家計簿アプリ２</header>
+
+<nav>
+  <button class="active" data-tab="register" onclick="switchTab('register', this)">📝 登録</button>
+  <button data-tab="view" onclick="switchTab('view', this)">📋 閲覧</button>
+  <button data-tab="deposit" onclick="switchTab('deposit', this)">🏦 入金額</button>
+</nav>
+
+<!-- ── 登録画面 ── -->
+<div id="page-register" class="page active">
+  <div class="card">
+    <h2>支出を登録する</h2>
+    <form id="registerForm">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="date">📅 日付</label>
+          <input type="date" id="date" required />
+        </div>
+        <div class="form-group">
+          <label for="amount">💴 金額（円）</label>
+          <input type="number" id="amount" placeholder="1000" min="0" inputmode="numeric" required />
+        </div>
+        <div class="form-group">
+          <label for="category">👤 カテゴリ</label>
+          <select id="category" required></select>
+        </div>
+        <div class="form-group">
+          <label for="item">🏷️ 項目</label>
+          <select id="item" required></select>
+        </div>
+        <div class="form-group">
+          <label for="wallet">💳 財布</label>
+          <select id="wallet" required></select>
+        </div>
+        <div class="form-group">
+          <label for="memo">📝 メモ</label>
+          <input type="text" id="memo" placeholder="例：スーパーでの買い物" />
+        </div>
+      </div>
+      <button type="submit" class="btn-primary">＋ 登録する</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── 閲覧画面 ── -->
+<div id="page-view" class="page">
+  <div class="summary">
+    <div class="summary-box">
+      <div class="label">今月の合計</div>
+      <div class="amount" id="thisMonthTotal">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label" id="selectedMonthLabel">選択月の合計</div>
+      <div class="amount" id="selectedMonthTotal">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label" id="filteredLabel">表示中の合計</div>
+      <div class="amount" id="filteredTotal">¥0</div>
+    </div>
+  </div>
+
+  <!-- 月選択 -->
+  <div class="month-nav">
+    <button type="button" class="month-btn" onclick="shiftMonth(-1)" aria-label="前の月">◀</button>
+    <select id="monthSelect" onchange="onMonthChange()"></select>
+    <button type="button" class="month-btn" onclick="shiftMonth(1)" aria-label="次の月">▶</button>
+  </div>
+
+  <!-- カテゴリフィルタ -->
+  <div class="chips" id="categoryChips"></div>
+
+  <!-- 内訳 -->
+  <div class="breakdown-card">
+    <div class="breakdown-header">
+      <span id="breakdownTitle">カテゴリ別の合計</span>
+      <span class="breakdown-total" id="breakdownTotal">¥0</span>
+    </div>
+    <div id="breakdownList" class="breakdown-list"></div>
+  </div>
+
+  <!-- 固定費セクション -->
+  <div class="fixed-cost-section">
+    <div class="fixed-cost-header" onclick="toggleFixedCostSection()">
+      <span><span id="fixedCostToggle">▶</span> 🔄 固定費（毎月）</span>
+      <span class="fixed-cost-total" id="fixedCostTotal">¥0</span>
+    </div>
+    <div id="fixedCostBody" style="display:none;">
+      <div id="fixedCostList"></div>
+      <button class="btn-add-fixed" onclick="openFixedCostModal()">＋ 固定費を追加</button>
+    </div>
+  </div>
+
+  <!-- 一覧 -->
+  <div class="list-card">
+    <div class="list-header" id="listHeader">一覧</div>
+    <div id="mobileList" class="mobile-list"></div>
+    <table id="desktopTable">
+      <thead>
+        <tr>
+          <th>日付</th>
+          <th>カテゴリ</th>
+          <th>項目</th>
+          <th>財布</th>
+          <th>金額</th>
+          <th>メモ</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="entryList"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">データがありません</div>
+  </div>
+</div>
+
+<!-- ── 入金額画面（未定） ── -->
+<div id="page-deposit" class="page">
+  <div class="card">
+    <h2>入金額</h2>
+    <p class="placeholder-text">この画面は準備中です。登録・閲覧が整ったあとに仕様を決めて実装します。</p>
+  </div>
+</div>
+
+<!-- ── 編集モーダル ── -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h2>✏️ 編集する</h2>
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="editDate">日付</label>
+        <input type="date" id="editDate" required />
+      </div>
+      <div class="form-group">
+        <label for="editAmount">金額（円）</label>
+        <input type="number" id="editAmount" min="0" inputmode="numeric" required />
+      </div>
+      <div class="form-group">
+        <label for="editCategory">カテゴリ</label>
+        <select id="editCategory"></select>
+      </div>
+      <div class="form-group">
+        <label for="editItem">項目</label>
+        <select id="editItem"></select>
+      </div>
+      <div class="form-group">
+        <label for="editWallet">財布</label>
+        <select id="editWallet"></select>
+      </div>
+      <div class="form-group">
+        <label for="editMemo">メモ</label>
+        <input type="text" id="editMemo" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="btn-save" onclick="saveEdit()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 固定費モーダル ── -->
+<div class="modal-overlay" id="fixedCostModal">
+  <div class="modal">
+    <h2 id="fixedCostModalTitle">＋ 固定費を追加</h2>
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="fixedCostName">固定費名</label>
+        <input type="text" id="fixedCostName" placeholder="例：家賃" required />
+      </div>
+      <div class="form-group">
+        <label for="fixedCostAmount">金額（円/月）</label>
+        <input type="number" id="fixedCostAmount" min="0" inputmode="numeric" placeholder="60400" required />
+      </div>
+      <div class="form-group">
+        <label for="fixedCostCategory">カテゴリ</label>
+        <select id="fixedCostCategory"></select>
+      </div>
+      <div class="form-group">
+        <label for="fixedCostWallet">財布</label>
+        <select id="fixedCostWallet"></select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeFixedCostModal()">キャンセル</button>
+      <button class="btn-save" onclick="saveFixedCost()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDK (compat版) — 既存アプリと同じ設定ファイルを共有 -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

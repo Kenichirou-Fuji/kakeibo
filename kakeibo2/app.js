@@ -1,0 +1,721 @@
+// ════════════════════════════════════════════════════════
+// 家計簿アプリ２
+// 既存アプリと同じ Firebase プロジェクトを使い、別コレクションに保存する
+// ════════════════════════════════════════════════════════
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+  console.warn('オフライン永続化を有効にできませんでした:', err.code);
+});
+
+// ── 定義 ──
+const COL_ENTRIES = 'kakeibo2_entries';
+const COL_FIXED = 'kakeibo2_fixedCosts';
+const COL_META = 'kakeibo2_meta';
+const META_SEED_DOC = 'fixedCostSeed';
+
+const CATEGORY_ORDER = ['family', 'konami', 'ken'];
+const CATEGORIES = { family: '家族', konami: 'こなみ', ken: 'けん' };
+const ITEMS = {
+  family: ['食費', '外食費', '雑費', '旅行'],
+  konami: ['雑費'],
+  ken: ['卓球', '雑費'],
+};
+const WALLET_ORDER = ['ken', 'konami', 'family'];
+const WALLETS = { ken: 'けんの財布', konami: 'こなみの財布', family: '家族財布' };
+// カテゴリを選んだときに初期値として合わせる財布
+const DEFAULT_WALLET_FOR_CATEGORY = { family: 'family', konami: 'konami', ken: 'ken' };
+
+// 初回のみ Firestore に投入する固定費の初期値（wallet = どの財布から支払うか）
+const DEFAULT_FIXED_COSTS = [
+  { category: 'family', name: '家賃', amount: 60400, wallet: 'family' },
+  { category: 'family', name: '駐車場', amount: 5000, wallet: 'family' },
+  { category: 'family', name: 'ネット', amount: 0, wallet: 'family' },
+  { category: 'family', name: 'スマホ', amount: 6000, wallet: 'konami' },
+  { category: 'family', name: '自動車税', amount: 2875, wallet: 'family' },
+  { category: 'family', name: '車保険', amount: 2500, wallet: 'family' },
+  { category: 'family', name: 'nhk', amount: 1750, wallet: 'family' },
+  { category: 'konami', name: '奨学金', amount: 15000, wallet: 'konami' },
+  { category: 'konami', name: '保険', amount: 5000, wallet: 'konami' },
+  { category: 'konami', name: 'ideco', amount: 5000, wallet: 'konami' },
+  { category: 'konami', name: 'NISA', amount: 33000, wallet: 'konami' },
+  { category: 'konami', name: '定期預金', amount: 30000, wallet: 'konami' },
+  { category: 'ken', name: '保険', amount: 15000, wallet: 'family' },
+  { category: 'ken', name: 'サブスク', amount: 3272, wallet: 'ken' },
+  { category: 'ken', name: 'ideco', amount: 5000, wallet: 'ken' },
+  { category: 'ken', name: 'NISA', amount: 200000, wallet: 'ken' },
+];
+
+// ── 状態 ──
+let cachedEntries = [];
+let cachedFixedCosts = [];
+let editingId = null;
+let editingFixedCostId = null;
+let listenersStarted = false;
+let seedChecked = false;
+const viewState = { month: currentMonth(), category: '', item: '' };
+
+// ── 認証 → Firestore リスナー ──
+firebase.auth().onAuthStateChanged(user => {
+  if (!user) {
+    firebase.auth().signInAnonymously().catch(error => {
+      console.error('Firebase Auth Error:', error);
+      showToast('⚠️ ログインに失敗しました');
+    });
+    return;
+  }
+  if (listenersStarted) return;
+  listenersStarted = true;
+
+  db.collection(COL_ENTRIES).onSnapshot(
+    snapshot => {
+      cachedEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      renderView();
+    },
+    err => {
+      console.error('Firestore 同期エラー (entries):', err);
+      showToast('⚠️ データの読み込みに失敗しました');
+    }
+  );
+
+  db.collection(COL_FIXED).onSnapshot(
+    snapshot => {
+      cachedFixedCosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      sortFixedCosts();
+      renderView();
+      if (!seedChecked && !snapshot.metadata.fromCache) {
+        seedChecked = true;
+        if (snapshot.empty) seedFixedCostsIfNeeded();
+      }
+    },
+    err => {
+      console.error('Firestore 同期エラー (fixedCosts):', err);
+      showToast('⚠️ 固定費の読み込みに失敗しました');
+    }
+  );
+});
+
+// 固定費が一件もなく、まだ初期投入していなければ既定の一覧を投入する
+async function seedFixedCostsIfNeeded() {
+  try {
+    const metaRef = db.collection(COL_META).doc(META_SEED_DOC);
+    const meta = await metaRef.get();
+    if (meta.exists) return;
+
+    const batch = db.batch();
+    DEFAULT_FIXED_COSTS.forEach((fc, i) => {
+      const ref = db.collection(COL_FIXED).doc(`seed-${fc.category}-${i}`);
+      batch.set(ref, {
+        ...fc,
+        order: i,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+    batch.set(metaRef, { seededAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await batch.commit();
+    showToast('固定費の初期値を投入しました');
+  } catch (err) {
+    console.error('固定費の初期投入に失敗:', err);
+  }
+}
+
+// ── 初期化 ──
+document.addEventListener('DOMContentLoaded', () => {
+  fillSelect(document.getElementById('category'), CATEGORY_ORDER, CATEGORIES);
+  fillSelect(document.getElementById('wallet'), WALLET_ORDER, WALLETS);
+  fillSelect(document.getElementById('editCategory'), CATEGORY_ORDER, CATEGORIES);
+  fillSelect(document.getElementById('editWallet'), WALLET_ORDER, WALLETS);
+  fillSelect(document.getElementById('fixedCostCategory'), CATEGORY_ORDER, CATEGORIES);
+  fillSelect(document.getElementById('fixedCostWallet'), WALLET_ORDER, WALLETS);
+
+  resetRegisterForm();
+  document.getElementById('category').addEventListener('change', e => {
+    fillItemSelect(document.getElementById('item'), e.target.value);
+    // カテゴリに合わせて財布の初期値も切り替える（手動で変更可）
+    document.getElementById('wallet').value = DEFAULT_WALLET_FOR_CATEGORY[e.target.value] || 'family';
+  });
+  document.getElementById('editCategory').addEventListener('change', e => {
+    fillItemSelect(document.getElementById('editItem'), e.target.value);
+  });
+
+  document.getElementById('registerForm').addEventListener('submit', onRegisterSubmit);
+
+  document.getElementById('editModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+  document.getElementById('fixedCostModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeFixedCostModal();
+  });
+
+  renderView();
+});
+
+function fillSelect(select, order, labels) {
+  select.innerHTML = order.map(key => `<option value="${key}">${labels[key]}</option>`).join('');
+}
+
+function fillItemSelect(select, category, selected) {
+  const items = [...(ITEMS[category] || [])];
+  if (selected && !items.includes(selected)) items.push(selected);
+  select.innerHTML = items.map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join('');
+  if (selected) select.value = selected;
+}
+
+function resetRegisterForm() {
+  document.getElementById('registerForm').reset();
+  document.getElementById('date').value = today();
+  document.getElementById('category').value = 'family';
+  fillItemSelect(document.getElementById('item'), 'family');
+  document.getElementById('wallet').value = DEFAULT_WALLET_FOR_CATEGORY.family;
+}
+
+// ── 日付ユーティリティ ──
+function today() { return formatLocalDate(new Date()); }
+function currentMonth() { return formatLocalDate(new Date()).slice(0, 7); }
+
+function formatLocalDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function addMonths(month, diff) {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(y, m - 1 + diff, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(month) {
+  const [y, m] = month.split('-');
+  return `${y}年${Number(m)}月`;
+}
+
+function formatDate(d) {
+  const [y, m, day] = d.split('-');
+  return `${y}/${m}/${day}`;
+}
+
+function formatCurrency(amount) {
+  return '¥' + (Number(amount) || 0).toLocaleString();
+}
+
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function escapeAttr(str) { return escapeHtml(str); }
+
+// ── タブ切り替え ──
+function switchTab(tab, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + tab).classList.add('active');
+  btn.classList.add('active');
+  if (tab === 'view') renderView();
+}
+
+// ── 登録 ──
+async function onRegisterSubmit(e) {
+  e.preventDefault();
+  const amount = parseInt(document.getElementById('amount').value, 10);
+  const entry = {
+    date: document.getElementById('date').value,
+    amount,
+    category: document.getElementById('category').value,
+    item: document.getElementById('item').value,
+    wallet: document.getElementById('wallet').value,
+    memo: document.getElementById('memo').value.trim(),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  if (!entry.date || !Number.isFinite(amount)) { alert('日付と金額は必須です'); return; }
+
+  try {
+    await db.collection(COL_ENTRIES).add(entry);
+    showToast('登録しました！');
+    resetRegisterForm();
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 登録に失敗しました');
+  }
+}
+
+// ── 集計ユーティリティ ──
+function sumAmount(list) {
+  return list.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+}
+
+function entriesForMonth(month) {
+  return cachedEntries.filter(e => typeof e.date === 'string' && e.date.startsWith(month));
+}
+
+// 固定費を「その月の1日の支出」として扱う
+function fixedCostsAsEntries(month) {
+  return cachedFixedCosts.map(fc => ({
+    id: fc.id,
+    date: `${month}-01`,
+    amount: Number(fc.amount) || 0,
+    category: fc.category,
+    item: fc.name,
+    memo: '',
+    wallet: fc.wallet || null,
+    isFixedCost: true,
+  }));
+}
+
+function combinedForMonth(month) {
+  return entriesForMonth(month).concat(fixedCostsAsEntries(month));
+}
+
+function applyFilter(list, { category, item }) {
+  return list.filter(e => {
+    if (category && e.category !== category) return false;
+    if (item && e.item !== item) return false;
+    return true;
+  });
+}
+
+function availableMonths() {
+  const set = new Set([currentMonth(), viewState.month]);
+  cachedEntries.forEach(e => {
+    if (typeof e.date === 'string' && e.date.length >= 7) set.add(e.date.slice(0, 7));
+  });
+  return [...set].sort((a, b) => b.localeCompare(a));
+}
+
+// ── 閲覧画面の操作 ──
+function onMonthChange() {
+  viewState.month = document.getElementById('monthSelect').value;
+  viewState.item = '';
+  renderView();
+}
+
+function shiftMonth(diff) {
+  viewState.month = addMonths(viewState.month, diff);
+  viewState.item = '';
+  renderView();
+}
+
+function setCategory(category) {
+  viewState.category = category;
+  viewState.item = '';
+  renderView();
+}
+
+function setItem(item) {
+  viewState.item = viewState.item === item ? '' : item;
+  renderView();
+}
+
+// ── 閲覧画面の描画 ──
+function renderView() {
+  if (!document.getElementById('monthSelect')) return;
+  renderMonthSelect();
+  renderCategoryChips();
+  renderSummary();
+  renderBreakdown();
+  renderList();
+  renderFixedCosts();
+}
+
+function renderMonthSelect() {
+  const select = document.getElementById('monthSelect');
+  select.innerHTML = availableMonths()
+    .map(m => `<option value="${m}">${formatMonthLabel(m)}</option>`)
+    .join('');
+  select.value = viewState.month;
+}
+
+function renderCategoryChips() {
+  const container = document.getElementById('categoryChips');
+  const chips = [{ key: '', label: 'すべて' }].concat(
+    CATEGORY_ORDER.map(key => ({ key, label: CATEGORIES[key] }))
+  );
+  container.innerHTML = chips.map(c => `
+    <button type="button"
+      class="chip${viewState.category === c.key ? ' active' : ''}${c.key ? ` chip-${c.key}` : ''}"
+      onclick="setCategory('${c.key}')">${c.label}</button>
+  `).join('');
+}
+
+function renderSummary() {
+  const thisMonth = currentMonth();
+  const monthList = combinedForMonth(viewState.month);
+  const filtered = applyFilter(monthList, viewState);
+
+  document.getElementById('thisMonthTotal').textContent = formatCurrency(sumAmount(combinedForMonth(thisMonth)));
+  document.getElementById('selectedMonthLabel').textContent = `${formatMonthLabel(viewState.month)}の合計`;
+  document.getElementById('selectedMonthTotal').textContent = formatCurrency(sumAmount(monthList));
+
+  const filterLabel = [
+    viewState.category ? CATEGORIES[viewState.category] : null,
+    viewState.item || null,
+  ].filter(Boolean).join(' / ');
+  document.getElementById('filteredLabel').textContent = filterLabel ? `${filterLabel}の合計` : '表示中の合計';
+  document.getElementById('filteredTotal').textContent = formatCurrency(sumAmount(filtered));
+}
+
+function renderBreakdown() {
+  const title = document.getElementById('breakdownTitle');
+  const totalEl = document.getElementById('breakdownTotal');
+  const list = document.getElementById('breakdownList');
+  const monthList = combinedForMonth(viewState.month);
+  const monthLabel = formatMonthLabel(viewState.month);
+
+  if (!viewState.category) {
+    // カテゴリ別
+    title.textContent = `${monthLabel} カテゴリ別の合計`;
+    totalEl.textContent = formatCurrency(sumAmount(monthList));
+    list.innerHTML = CATEGORY_ORDER.map(key => {
+      const rows = monthList.filter(e => e.category === key);
+      return `
+        <button type="button" class="breakdown-row" onclick="setCategory('${key}')">
+          <span class="breakdown-name"><span class="badge badge-${key}">${CATEGORIES[key]}</span></span>
+          <span class="breakdown-count">${rows.length}件</span>
+          <span class="breakdown-amount">${formatCurrency(sumAmount(rows))}</span>
+          <span class="breakdown-arrow">›</span>
+        </button>`;
+    }).join('');
+    return;
+  }
+
+  // 項目別（選択カテゴリ内）
+  const catList = monthList.filter(e => e.category === viewState.category);
+  title.textContent = `${monthLabel} ${CATEGORIES[viewState.category]} 項目別の合計`;
+  totalEl.textContent = formatCurrency(sumAmount(catList));
+
+  const fixedNames = new Set(catList.filter(e => e.isFixedCost).map(e => e.item));
+  const itemNames = [...ITEMS[viewState.category]];
+  catList.forEach(e => {
+    if (e.item && !itemNames.includes(e.item)) itemNames.push(e.item);
+  });
+
+  const rowsHtml = itemNames.map(name => {
+    const rows = catList.filter(e => e.item === name);
+    const isFixed = fixedNames.has(name);
+    const active = viewState.item === name;
+    return `
+      <button type="button" class="breakdown-row${active ? ' active' : ''}${isFixed ? ' is-fixed' : ''}"
+        onclick="setItem(${JSON.stringify(name).replace(/"/g, '&quot;')})">
+        <span class="breakdown-name">${escapeHtml(name)}${isFixed ? ' <span class="badge badge-fixed">固定</span>' : ''}</span>
+        <span class="breakdown-count">${rows.length}件</span>
+        <span class="breakdown-amount">${formatCurrency(sumAmount(rows))}</span>
+        <span class="breakdown-arrow">${active ? '✕' : '›'}</span>
+      </button>`;
+  }).join('');
+
+  list.innerHTML = rowsHtml || '<div class="breakdown-empty">項目がありません</div>';
+}
+
+function renderList() {
+  const filtered = applyFilter(combinedForMonth(viewState.month), viewState)
+    .sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      return (a.isFixedCost ? 1 : 0) - (b.isFixedCost ? 1 : 0);
+    });
+
+  const header = document.getElementById('listHeader');
+  const parts = [formatMonthLabel(viewState.month)];
+  if (viewState.category) parts.push(CATEGORIES[viewState.category]);
+  if (viewState.item) parts.push(viewState.item);
+  header.textContent = `${parts.join(' / ')} の一覧（${filtered.length}件）`;
+
+  const tbody = document.getElementById('entryList');
+  const mobileList = document.getElementById('mobileList');
+  const empty = document.getElementById('emptyState');
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    mobileList.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = filtered.map(e => `
+    <tr${e.isFixedCost ? ' class="fixed-cost-row"' : ''}>
+      <td>${formatDate(e.date)}</td>
+      <td><span class="badge badge-${e.category}">${CATEGORIES[e.category] || '—'}</span></td>
+      <td>${escapeHtml(e.item || '—')}${e.isFixedCost ? ' <span class="badge badge-fixed">固定費</span>' : ''}</td>
+      <td>${e.wallet ? `<span class="badge badge-wallet-${e.wallet}">${WALLETS[e.wallet] || e.wallet}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="amount-cell">${formatCurrency(e.amount)}</td>
+      <td class="muted">${escapeHtml(e.memo || '—')}</td>
+      <td>
+        ${e.isFixedCost ? `
+        <div class="actions">
+          <button class="btn-edit" onclick="openEditFixedCost('${e.id}')">編集</button>
+        </div>` : `
+        <div class="actions">
+          <button class="btn-edit" onclick="openEdit('${e.id}')">編集</button>
+          <button class="btn-del" onclick="deleteEntry('${e.id}')">削除</button>
+        </div>`}
+      </td>
+    </tr>
+  `).join('');
+
+  mobileList.innerHTML = filtered.map(e => `
+    <div class="mobile-card${e.isFixedCost ? ' fixed-cost-card' : ''}">
+      <div class="card-content">
+        <div class="card-row">
+          <div>
+            <div class="card-label">${formatDate(e.date)}</div>
+            <div class="card-value">${escapeHtml(e.item || '—')}</div>
+          </div>
+          <div class="card-amount">${formatCurrency(e.amount)}</div>
+        </div>
+        <div class="card-row card-badges">
+          <span class="badge badge-${e.category}">${CATEGORIES[e.category] || '—'}</span>
+          ${e.wallet ? `<span class="badge badge-wallet-${e.wallet}">${WALLETS[e.wallet] || e.wallet}</span>` : ''}
+          ${e.isFixedCost ? '<span class="badge badge-fixed">固定費</span>' : ''}
+        </div>
+        ${e.memo ? `<div class="card-memo">💬 ${escapeHtml(e.memo)}</div>` : ''}
+      </div>
+      ${e.isFixedCost ? `
+      <div class="card-actions">
+        <button class="card-btn-edit" onclick="openEditFixedCost('${e.id}')">✏️ 編集</button>
+      </div>` : `
+      <div class="card-actions">
+        <button class="card-btn-edit" onclick="openEdit('${e.id}')">✏️ 編集</button>
+        <button class="card-btn-del" onclick="deleteEntry('${e.id}')">🗑️ 削除</button>
+      </div>`}
+    </div>
+  `).join('');
+
+  initSwipe();
+}
+
+// ── 固定費 ──
+function sortFixedCosts() {
+  cachedFixedCosts.sort((a, b) => {
+    const ca = CATEGORY_ORDER.indexOf(a.category);
+    const cb = CATEGORY_ORDER.indexOf(b.category);
+    if (ca !== cb) return ca - cb;
+    return (a.order ?? 999) - (b.order ?? 999) || String(a.name).localeCompare(String(b.name));
+  });
+}
+
+function renderFixedCosts() {
+  const container = document.getElementById('fixedCostList');
+  const totalEl = document.getElementById('fixedCostTotal');
+  totalEl.textContent = formatCurrency(sumAmount(cachedFixedCosts)) + ' / 月';
+
+  if (cachedFixedCosts.length === 0) {
+    container.innerHTML = '<div class="fixed-cost-empty">固定費が登録されていません</div>';
+    return;
+  }
+
+  container.innerHTML = CATEGORY_ORDER.map(key => {
+    const rows = cachedFixedCosts.filter(fc => fc.category === key);
+    if (rows.length === 0) return '';
+    return `
+      <div class="fixed-cost-group">
+        <div class="fixed-cost-group-header">
+          <span class="badge badge-${key}">${CATEGORIES[key]}</span>
+          <span class="fixed-cost-group-total">${formatCurrency(sumAmount(rows))}</span>
+        </div>
+        ${rows.map(fc => `
+          <div class="fixed-cost-item">
+            <div class="fixed-cost-name">
+              ${escapeHtml(fc.name)}
+              ${fc.wallet ? `<span class="badge badge-wallet-${fc.wallet}">${WALLETS[fc.wallet] || fc.wallet}</span>` : ''}
+            </div>
+            <div class="fixed-cost-right">
+              <div class="fixed-cost-amount">${formatCurrency(fc.amount)}</div>
+              <div class="fixed-cost-actions">
+                <button class="btn-edit" onclick="openEditFixedCost('${fc.id}')">編集</button>
+                <button class="btn-del" onclick="deleteFixedCost('${fc.id}')">削除</button>
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  }).join('');
+}
+
+function toggleFixedCostSection() {
+  const body = document.getElementById('fixedCostBody');
+  const toggle = document.getElementById('fixedCostToggle');
+  const open = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  toggle.textContent = open ? '▼' : '▶';
+}
+
+function openFixedCostModal() {
+  editingFixedCostId = null;
+  document.getElementById('fixedCostName').value = '';
+  document.getElementById('fixedCostAmount').value = '';
+  const category = viewState.category || 'family';
+  document.getElementById('fixedCostCategory').value = category;
+  document.getElementById('fixedCostWallet').value = DEFAULT_WALLET_FOR_CATEGORY[category];
+  document.getElementById('fixedCostModalTitle').textContent = '＋ 固定費を追加';
+  document.getElementById('fixedCostModal').classList.add('open');
+}
+
+function openEditFixedCost(id) {
+  const fc = cachedFixedCosts.find(f => f.id === id);
+  if (!fc) return;
+  editingFixedCostId = id;
+  document.getElementById('fixedCostName').value = fc.name || '';
+  document.getElementById('fixedCostAmount').value = fc.amount;
+  document.getElementById('fixedCostCategory').value = fc.category || 'family';
+  document.getElementById('fixedCostWallet').value = fc.wallet || DEFAULT_WALLET_FOR_CATEGORY[fc.category] || 'family';
+  document.getElementById('fixedCostModalTitle').textContent = '✏️ 固定費を編集';
+  document.getElementById('fixedCostModal').classList.add('open');
+}
+
+function closeFixedCostModal() {
+  document.getElementById('fixedCostModal').classList.remove('open');
+  editingFixedCostId = null;
+}
+
+async function saveFixedCost() {
+  const name = document.getElementById('fixedCostName').value.trim();
+  const amount = parseInt(document.getElementById('fixedCostAmount').value, 10);
+  const category = document.getElementById('fixedCostCategory').value;
+  const wallet = document.getElementById('fixedCostWallet').value;
+  if (!name || !Number.isFinite(amount)) { alert('固定費名と金額は必須です'); return; }
+
+  try {
+    if (editingFixedCostId) {
+      await db.collection(COL_FIXED).doc(editingFixedCostId).update({ name, amount, category, wallet });
+      showToast('固定費を更新しました');
+    } else {
+      const maxOrder = cachedFixedCosts.reduce((m, fc) => Math.max(m, Number(fc.order) || 0), -1);
+      await db.collection(COL_FIXED).add({
+        name, amount, category, wallet,
+        order: maxOrder + 1,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      showToast('固定費を登録しました');
+    }
+    closeFixedCostModal();
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 固定費の保存に失敗しました');
+  }
+}
+
+async function deleteFixedCost(id) {
+  const fc = cachedFixedCosts.find(f => f.id === id);
+  if (!confirm(`固定費「${fc ? fc.name : ''}」を削除しますか？`)) return;
+  try {
+    await db.collection(COL_FIXED).doc(id).delete();
+    showToast('固定費を削除しました');
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 固定費の削除に失敗しました');
+  }
+}
+
+// ── 支出の編集・削除 ──
+function openEdit(id) {
+  const entry = cachedEntries.find(e => e.id === id);
+  if (!entry) return;
+  editingId = id;
+  document.getElementById('editDate').value = entry.date || today();
+  document.getElementById('editAmount').value = entry.amount;
+  document.getElementById('editCategory').value = entry.category || 'family';
+  fillItemSelect(document.getElementById('editItem'), entry.category || 'family', entry.item);
+  document.getElementById('editWallet').value = entry.wallet || DEFAULT_WALLET_FOR_CATEGORY[entry.category] || 'family';
+  document.getElementById('editMemo').value = entry.memo || '';
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('open');
+  editingId = null;
+}
+
+async function saveEdit() {
+  if (!editingId) return;
+  const date = document.getElementById('editDate').value;
+  const amount = parseInt(document.getElementById('editAmount').value, 10);
+  const category = document.getElementById('editCategory').value;
+  const item = document.getElementById('editItem').value;
+  const wallet = document.getElementById('editWallet').value;
+  const memo = document.getElementById('editMemo').value.trim();
+  if (!date || !Number.isFinite(amount)) { alert('日付と金額は必須です'); return; }
+
+  try {
+    await db.collection(COL_ENTRIES).doc(editingId).update({ date, amount, category, item, wallet, memo });
+    closeModal();
+    showToast('更新しました！');
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 更新に失敗しました');
+  }
+}
+
+async function deleteEntry(id) {
+  if (!confirm('この支出を削除しますか？')) return;
+  try {
+    await db.collection(COL_ENTRIES).doc(id).delete();
+    showToast('削除しました');
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 削除に失敗しました');
+  }
+}
+
+// ── トースト ──
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── スマホ用スワイプ（カードを左にスワイプすると編集・削除ボタンが出る） ──
+function initSwipe() {
+  const cards = document.querySelectorAll('.mobile-card');
+
+  const closeCard = card => {
+    const content = card.querySelector('.card-content');
+    if (!content) return;
+    card.classList.remove('swiped');
+    content.style.transform = 'translateX(0)';
+  };
+  const openCard = (card, width) => {
+    const content = card.querySelector('.card-content');
+    if (!content) return;
+    card.classList.add('swiped');
+    content.style.transform = `translateX(-${width}px)`;
+  };
+
+  cards.forEach(card => {
+    const content = card.querySelector('.card-content');
+    const actions = card.querySelector('.card-actions');
+    if (!content || !actions) return;
+
+    let startX = 0;
+    let startTime = 0;
+    const revealWidth = () => Math.ceil(actions.getBoundingClientRect().width);
+
+    card.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX;
+      startTime = Date.now();
+      cards.forEach(c => { if (c !== card) closeCard(c); });
+    }, { passive: true });
+
+    card.addEventListener('touchmove', e => {
+      const diff = startX - e.touches[0].clientX;
+      content.style.transform = diff <= 0 ? 'translateX(0)' : `translateX(-${Math.min(diff, revealWidth())}px)`;
+    }, { passive: true });
+
+    card.addEventListener('touchend', e => {
+      const diff = startX - e.changedTouches[0].clientX;
+      const duration = Date.now() - startTime;
+      const width = revealWidth();
+      if ((diff > 30 && duration < 500) || diff > width / 2) openCard(card, width);
+      else closeCard(card);
+    });
+
+    content.addEventListener('click', e => {
+      if (!e.target.closest('button')) closeCard(card);
+    });
+  });
+}
