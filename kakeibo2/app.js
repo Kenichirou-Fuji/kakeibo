@@ -19,7 +19,7 @@ const META_SEED_DOC = 'fixedCostSeed';
 const CATEGORY_ORDER = ['family', 'konami', 'ken'];
 const CATEGORIES = { family: '家族', konami: 'こなみ', ken: 'けん' };
 const ITEMS = {
-  family: ['食費', '外食費', '雑費', '旅行', 'ガソリン', '日用品', '電気', 'ガス', '水道'],
+  family: ['食費', '外食費', '日用品', '雑費', 'ガソリン', '旅行', '電気', 'ガス', '水道'],
   konami: ['雑費'],
   ken: ['卓球', '雑費'],
 };
