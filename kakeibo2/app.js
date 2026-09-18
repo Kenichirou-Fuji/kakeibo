@@ -19,10 +19,14 @@ const META_SEED_DOC = 'fixedCostSeed';
 const CATEGORY_ORDER = ['family', 'konami', 'ken'];
 const CATEGORIES = { family: '家族', konami: 'こなみ', ken: 'けん' };
 const ITEMS = {
-  family: ['食費', '外食費', '雑費', '旅行'],
+  family: ['食費', '外食費', '雑費', '旅行', 'ガソリン', '日用品', '電気', 'ガス', '水道'],
   konami: ['雑費'],
   ken: ['卓球', '雑費'],
 };
+// 毎月必ず入力する項目（未入力なら警告する）
+const REQUIRED_ITEMS = { family: ['電気', 'ガス', '水道'] };
+// 財布が固定される項目（カテゴリ → 項目 → 財布）
+const LOCKED_WALLET_ITEMS = { family: { '電気': 'family', 'ガス': 'family', '水道': 'family' } };
 const WALLET_ORDER = ['ken', 'konami', 'family'];
 const WALLETS = { ken: 'けんの財布', konami: 'こなみの財布', family: '家族財布' };
 // カテゴリを選んだときに初期値として合わせる財布
@@ -166,10 +170,14 @@ document.addEventListener('DOMContentLoaded', () => {
     fillItemSelect(document.getElementById('item'), e.target.value);
     // カテゴリに合わせて財布の初期値も切り替える（手動で変更可）
     document.getElementById('wallet').value = DEFAULT_WALLET_FOR_CATEGORY[e.target.value] || 'family';
+    applyWalletLock('category', 'item', 'wallet');
   });
+  document.getElementById('item').addEventListener('change', () => applyWalletLock('category', 'item', 'wallet'));
   document.getElementById('editCategory').addEventListener('change', e => {
     fillItemSelect(document.getElementById('editItem'), e.target.value);
+    applyWalletLock('editCategory', 'editItem', 'editWallet');
   });
+  document.getElementById('editItem').addEventListener('change', () => applyWalletLock('editCategory', 'editItem', 'editWallet'));
 
   document.getElementById('registerForm').addEventListener('submit', onRegisterSubmit);
 
@@ -182,6 +190,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderView();
 });
+
+// 財布が固定される項目なら財布セレクトを固定し、それ以外なら解除する
+function lockedWalletFor(category, item) {
+  return (LOCKED_WALLET_ITEMS[category] || {})[item] || null;
+}
+
+function applyWalletLock(categoryId, itemId, walletId) {
+  const walletSel = document.getElementById(walletId);
+  const locked = lockedWalletFor(document.getElementById(categoryId).value, document.getElementById(itemId).value);
+  if (locked) {
+    walletSel.value = locked;
+    walletSel.disabled = true;
+    walletSel.title = 'この項目は家族財布から支払う項目です';
+  } else {
+    walletSel.disabled = false;
+    walletSel.title = '';
+  }
+}
 
 function fillSelect(select, order, labels) {
   select.innerHTML = order.map(key => `<option value="${key}">${labels[key]}</option>`).join('');
@@ -200,6 +226,7 @@ function resetRegisterForm() {
   document.getElementById('category').value = 'family';
   fillItemSelect(document.getElementById('item'), 'family');
   document.getElementById('wallet').value = DEFAULT_WALLET_FOR_CATEGORY.family;
+  applyWalletLock('category', 'item', 'wallet');
 }
 
 // ── 日付ユーティリティ ──
@@ -264,6 +291,7 @@ async function onRegisterSubmit(e) {
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
   if (!entry.date || !Number.isFinite(amount)) { alert('日付と金額は必須です'); return; }
+  entry.wallet = lockedWalletFor(entry.category, entry.item) || entry.wallet;
 
   try {
     await db.collection(COL_ENTRIES).add(entry);
@@ -352,6 +380,42 @@ function renderView() {
   renderList();
   renderFixedCosts();
   renderDeposit();
+  renderAlerts();
+}
+
+// ── 必須項目の未入力チェック ──
+function missingRequiredItems(month) {
+  const list = entriesForMonth(month);
+  const missing = [];
+  Object.entries(REQUIRED_ITEMS).forEach(([category, items]) => {
+    items.forEach(item => {
+      if (!list.some(e => e.category === category && e.item === item)) missing.push({ category, item });
+    });
+  });
+  return missing;
+}
+
+function isRequiredItem(category, item) {
+  return (REQUIRED_ITEMS[category] || []).includes(item);
+}
+
+function renderAlertInto(elementId, month) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const missing = missingRequiredItems(month);
+  if (missing.length === 0) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.style.display = '';
+  el.innerHTML = `⚠️ <strong>${formatMonthLabel(month)}</strong> の未入力: `
+    + missing.map(m => `<span class="alert-item">${escapeHtml(m.item)}</span>`).join('');
+}
+
+function renderAlerts() {
+  renderAlertInto('registerAlert', currentMonth());
+  renderAlertInto('viewAlert', viewState.month);
 }
 
 function renderMonthSelect() {
@@ -429,11 +493,13 @@ function renderBreakdown() {
   const rowsHtml = itemNames.map(name => {
     const rows = catList.filter(e => e.item === name);
     const isFixed = fixedNames.has(name);
+    const isRequired = isRequiredItem(viewState.category, name);
+    const isMissing = isRequired && rows.length === 0;
     const active = viewState.item === name;
     return `
-      <button type="button" class="breakdown-row${active ? ' active' : ''}${isFixed ? ' is-fixed' : ''}"
+      <button type="button" class="breakdown-row${active ? ' active' : ''}${isFixed ? ' is-fixed' : ''}${isMissing ? ' is-missing' : ''}"
         onclick="setItem(${JSON.stringify(name).replace(/"/g, '&quot;')})">
-        <span class="breakdown-name">${escapeHtml(name)}${isFixed ? ' <span class="badge badge-fixed">固定</span>' : ''}</span>
+        <span class="breakdown-name">${escapeHtml(name)}${isFixed ? ' <span class="badge badge-fixed">固定</span>' : ''}${isRequired ? ` <span class="badge badge-required">${isMissing ? '未入力' : '必須'}</span>` : ''}</span>
         <span class="breakdown-count">${rows.length}件</span>
         <span class="breakdown-amount">${formatCurrency(sumAmount(rows))}</span>
         <span class="breakdown-arrow">${active ? '✕' : '›'}</span>
@@ -652,6 +718,7 @@ function openEdit(id) {
   document.getElementById('editCategory').value = entry.category || 'family';
   fillItemSelect(document.getElementById('editItem'), entry.category || 'family', entry.item);
   document.getElementById('editWallet').value = entry.wallet || DEFAULT_WALLET_FOR_CATEGORY[entry.category] || 'family';
+  applyWalletLock('editCategory', 'editItem', 'editWallet');
   document.getElementById('editMemo').value = entry.memo || '';
   document.getElementById('editModal').classList.add('open');
 }
@@ -667,7 +734,7 @@ async function saveEdit() {
   const amount = parseInt(document.getElementById('editAmount').value, 10);
   const category = document.getElementById('editCategory').value;
   const item = document.getElementById('editItem').value;
-  const wallet = document.getElementById('editWallet').value;
+  const wallet = lockedWalletFor(category, item) || document.getElementById('editWallet').value;
   const memo = document.getElementById('editMemo').value.trim();
   if (!date || !Number.isFinite(amount)) { alert('日付と金額は必須です'); return; }
 

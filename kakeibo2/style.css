@@ -56,6 +56,30 @@ nav button:hover:not(.active) { background: #f7fafc; color: #4a5568; }
 
 .muted { color: #718096; }
 
+/* ── 必須項目の未入力警告 ── */
+.alert {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+.alert-item {
+  display: inline-block;
+  background: #ffedd5;
+  border-radius: 999px;
+  padding: 0.05rem 0.6rem;
+  margin: 0 0.2rem;
+  font-weight: 700;
+}
+.badge-required { background: #ffedd5; color: #c2410c; }
+.breakdown-row.is-missing { background: #fff7ed; }
+.breakdown-row.is-missing .badge-required { background: #f97316; color: white; }
+select:disabled { background: #f1f5f9; color: #64748b; cursor: not-allowed; }
+
 /* ── カード・フォーム ── */
 .card {
   background: white;
