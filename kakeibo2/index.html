@@ -122,12 +122,34 @@
   </div>
 </div>
 
-<!-- ── 入金額画面（未定） ── -->
+<!-- ── 入金額画面 ── -->
 <div id="page-deposit" class="page">
-  <div class="card">
-    <h2>入金額</h2>
-    <p class="placeholder-text">この画面は準備中です。登録・閲覧が整ったあとに仕様を決めて実装します。</p>
+  <div class="month-nav">
+    <button type="button" class="month-btn" onclick="shiftDepositMonth(-1)" aria-label="前の月">◀</button>
+    <select id="depositMonthSelect" onchange="onDepositMonthChange()"></select>
+    <button type="button" class="month-btn" onclick="shiftDepositMonth(1)" aria-label="次の月">▶</button>
   </div>
+
+  <div class="summary deposit-summary">
+    <div class="summary-box">
+      <div class="label">けんの入金額</div>
+      <div class="amount" id="depositTotal-ken">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label">こなみの入金額</div>
+      <div class="amount" id="depositTotal-konami">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label">合計</div>
+      <div class="amount" id="depositTotal-all">¥0</div>
+    </div>
+  </div>
+
+  <p class="deposit-description">
+    計算式: 基本入金額 ＋ 家族財布で払った本人分 － 本人の財布で払った家族分
+  </p>
+
+  <div id="depositCards"></div>
 </div>
 
 <!-- ── 編集モーダル ── -->

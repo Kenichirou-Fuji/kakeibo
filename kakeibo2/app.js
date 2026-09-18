@@ -48,9 +48,18 @@ const DEFAULT_FIXED_COSTS = [
   { category: 'ken', name: 'NISA', amount: 200000, wallet: 'ken' },
 ];
 
+// 入金額: 本人カテゴリの支出を家族財布で払えば加算、家族カテゴリの支出を本人の財布で払えば減算
+const DEPOSIT_PERSONS = ['ken', 'konami'];
+const DEFAULT_BASE_DEPOSIT = { ken: 180000, konami: 80000 };
+const META_DEPOSIT_SETTINGS_DOC = 'depositSettings';   // kakeibo2_meta/depositSettings { baseAmounts: {ken, konami} }
+const DEPOSIT_STATUS_PREFIX = 'deposit-';               // kakeibo2_meta/deposit-YYYY-MM-<person>
+
 // ── 状態 ──
 let cachedEntries = [];
 let cachedFixedCosts = [];
+let cachedDepositStatus = {};     // key: `${month}-${person}` → doc
+let cachedBaseAmounts = { ...DEFAULT_BASE_DEPOSIT };
+const depositState = { month: currentMonth() };
 let editingId = null;
 let editingFixedCostId = null;
 let listenersStarted = false;
@@ -93,6 +102,28 @@ firebase.auth().onAuthStateChanged(user => {
     err => {
       console.error('Firestore 同期エラー (fixedCosts):', err);
       showToast('⚠️ 固定費の読み込みに失敗しました');
+    }
+  );
+
+  db.collection(COL_META).onSnapshot(
+    snapshot => {
+      const status = {};
+      let base = { ...DEFAULT_BASE_DEPOSIT };
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (doc.id === META_DEPOSIT_SETTINGS_DOC) {
+          base = { ...base, ...(data.baseAmounts || {}) };
+        } else if (doc.id.startsWith(DEPOSIT_STATUS_PREFIX)) {
+          status[doc.id.slice(DEPOSIT_STATUS_PREFIX.length)] = { id: doc.id, ...data };
+        }
+      });
+      cachedDepositStatus = status;
+      cachedBaseAmounts = base;
+      renderDeposit();
+    },
+    err => {
+      console.error('Firestore 同期エラー (meta):', err);
+      showToast('⚠️ 入金情報の読み込みに失敗しました');
     }
   );
 });
@@ -216,6 +247,7 @@ function switchTab(tab, btn) {
   document.getElementById('page-' + tab).classList.add('active');
   btn.classList.add('active');
   if (tab === 'view') renderView();
+  if (tab === 'deposit') renderDeposit();
 }
 
 // ── 登録 ──
@@ -319,6 +351,7 @@ function renderView() {
   renderBreakdown();
   renderList();
   renderFixedCosts();
+  renderDeposit();
 }
 
 function renderMonthSelect() {
@@ -656,6 +689,164 @@ async function deleteEntry(id) {
   } catch (err) {
     console.error(err);
     showToast('⚠️ 削除に失敗しました');
+  }
+}
+
+// ── 入金額 ──
+function shiftDepositMonth(diff) {
+  depositState.month = addMonths(depositState.month, diff);
+  renderDeposit();
+}
+
+function onDepositMonthChange() {
+  depositState.month = document.getElementById('depositMonthSelect').value;
+  renderDeposit();
+}
+
+// 月・人ごとの入金額を計算する
+function calcDeposit(month, person) {
+  const list = combinedForMonth(month);
+  const plusItems = list.filter(e => e.category === person && e.wallet === 'family');
+  const minusItems = list.filter(e => e.category === 'family' && e.wallet === person);
+  const base = Number(cachedBaseAmounts[person]) || 0;
+  const plus = sumAmount(plusItems);
+  const minus = sumAmount(minusItems);
+  return { base, plus, minus, total: base + plus - minus, plusItems, minusItems };
+}
+
+function renderDeposit() {
+  const select = document.getElementById('depositMonthSelect');
+  if (!select) return;
+
+  const months = new Set(availableMonths());
+  months.add(depositState.month);
+  select.innerHTML = [...months].sort((a, b) => b.localeCompare(a))
+    .map(m => `<option value="${m}">${formatMonthLabel(m)}</option>`).join('');
+  select.value = depositState.month;
+
+  const month = depositState.month;
+  const results = {};
+  DEPOSIT_PERSONS.forEach(p => { results[p] = calcDeposit(month, p); });
+
+  DEPOSIT_PERSONS.forEach(p => {
+    document.getElementById(`depositTotal-${p}`).textContent = formatCurrency(results[p].total);
+  });
+  document.getElementById('depositTotal-all').textContent =
+    formatCurrency(DEPOSIT_PERSONS.reduce((s, p) => s + results[p].total, 0));
+
+  document.getElementById('depositCards').innerHTML = DEPOSIT_PERSONS.map(p => {
+    const r = results[p];
+    const name = CATEGORIES[p];
+    const status = cachedDepositStatus[`${month}-${p}`] || {};
+    const deposited = status.deposited === true;
+    return `
+      <div class="deposit-card${deposited ? ' is-deposited' : ''}">
+        <div class="deposit-card-header">
+          <span class="badge badge-${p}">${name}</span>
+          <span class="deposit-card-title">${formatMonthLabel(month)}の入金額</span>
+          <span class="deposit-card-total${r.total < 0 ? ' negative' : ''}">${formatCurrency(r.total)}</span>
+        </div>
+
+        <div class="deposit-formula">
+          ${formatCurrency(r.base)} + ${formatCurrency(r.plus)} − ${formatCurrency(r.minus)} = <strong>${formatCurrency(r.total)}</strong>
+        </div>
+
+        <div class="deposit-base-row">
+          <label for="baseAmount-${p}">基本入金額（円）</label>
+          <input type="number" id="baseAmount-${p}" min="0" step="1000" inputmode="numeric"
+            value="${r.base}" onchange="onBaseAmountChange('${p}', this)" />
+        </div>
+
+        <label class="deposit-check-row">
+          <input type="checkbox" id="depositCheck-${p}" ${deposited ? 'checked' : ''}
+            onchange="onDepositCheckedChange('${p}', this)" />
+          <span class="deposit-check-text">${formatMonthLabel(month)}の入金は完了した</span>
+          <span class="deposit-check-meta">${buildDepositMeta(status)}</span>
+        </label>
+
+        <div class="deposit-detail-grid">
+          <section class="deposit-detail-section">
+            <h3>＋ 家族財布で払った${name}分 <span>${formatCurrency(r.plus)}</span></h3>
+            ${renderDepositItems(r.plusItems, `${name}分を家族財布で払った支出はありません`)}
+          </section>
+          <section class="deposit-detail-section">
+            <h3>－ ${WALLETS[p]}で払った家族分 <span>${formatCurrency(r.minus)}</span></h3>
+            ${renderDepositItems(r.minusItems, `家族分を${WALLETS[p]}で払った支出はありません`)}
+          </section>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderDepositItems(items, emptyMessage) {
+  if (items.length === 0) return `<div class="deposit-empty">${emptyMessage}</div>`;
+  return items
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map(e => `
+      <div class="deposit-item${e.isFixedCost ? ' is-fixed' : ''}">
+        <div>
+          <div class="deposit-item-date">${formatDate(e.date)}${e.isFixedCost ? ' <span class="badge badge-fixed">固定費</span>' : ''}</div>
+          <div class="deposit-item-name">${escapeHtml(e.item || '—')}${e.memo ? `<span class="muted"> · ${escapeHtml(e.memo)}</span>` : ''}</div>
+        </div>
+        <div class="deposit-item-amount">${formatCurrency(e.amount)}</div>
+      </div>`).join('');
+}
+
+function buildDepositMeta(status) {
+  if (status.deposited !== true) return '未入金';
+  const checkedAt = status.checkedAt && typeof status.checkedAt.toDate === 'function' ? status.checkedAt.toDate() : null;
+  const when = checkedAt ? formatDateTime(checkedAt) : '記録中…';
+  const amount = Number.isFinite(status.amountAtCheck) ? ` ${formatCurrency(status.amountAtCheck)}` : '';
+  return `入金済み${amount}（${when}）`;
+}
+
+function formatDateTime(date) {
+  const h = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  return `${formatDate(formatLocalDate(date))} ${h}:${mi}`;
+}
+
+async function onBaseAmountChange(person, input) {
+  const value = parseInt(input.value, 10);
+  if (!Number.isFinite(value) || value < 0) {
+    input.value = cachedBaseAmounts[person];
+    return;
+  }
+  try {
+    await db.collection(COL_META).doc(META_DEPOSIT_SETTINGS_DOC).set({
+      baseAmounts: { [person]: value },
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    showToast(`${CATEGORIES[person]}の基本入金額を保存しました`);
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 基本入金額の保存に失敗しました');
+  }
+}
+
+async function onDepositCheckedChange(person, checkbox) {
+  const month = depositState.month;
+  const checked = checkbox.checked;
+  const r = calcDeposit(month, person);
+  checkbox.disabled = true;
+  try {
+    await db.collection(COL_META).doc(`${DEPOSIT_STATUS_PREFIX}${month}-${person}`).set({
+      month,
+      person,
+      deposited: checked,
+      checkedAt: checked ? firebase.firestore.FieldValue.serverTimestamp() : null,
+      amountAtCheck: checked ? r.total : null,
+      baseAtCheck: checked ? r.base : null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    showToast(checked ? `${CATEGORIES[person]}の入金を記録しました` : `${CATEGORIES[person]}を未入金に戻しました`);
+  } catch (err) {
+    console.error(err);
+    checkbox.checked = !checked;
+    showToast('⚠️ 入金状態の更新に失敗しました');
+  } finally {
+    checkbox.disabled = false;
   }
 }
 

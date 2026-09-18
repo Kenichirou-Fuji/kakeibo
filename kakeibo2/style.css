@@ -401,6 +401,99 @@ td { padding: 0.8rem 1rem; vertical-align: middle; }
 }
 .btn-add-fixed:hover { background: #e2e8f0; border-color: #2563eb; color: #2563eb; }
 
+/* ── 入金額 ── */
+.deposit-summary { margin-top: 0.25rem; }
+.deposit-description { color: #718096; font-size: 0.88rem; margin: 0 0 1rem 0.25rem; }
+
+.deposit-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  border: 2px solid transparent;
+}
+.deposit-card.is-deposited { border-color: #86efac; }
+
+.deposit-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+.deposit-card-title { font-weight: 600; color: #4a5568; flex: 1; }
+.deposit-card-total { font-size: 1.5rem; font-weight: 800; color: #2563eb; white-space: nowrap; }
+.deposit-card-total.negative { color: #c53030; }
+
+.deposit-formula {
+  color: #4a5568;
+  font-size: 0.95rem;
+  padding: 0.6rem 0.8rem;
+  background: #f7fafc;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.deposit-base-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.deposit-base-row label { white-space: nowrap; }
+.deposit-base-row input { flex: 1; max-width: 220px; }
+
+.deposit-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+  background: #f0fff4;
+  border: 1px solid #c6f6d5;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #2d3748;
+  flex-wrap: wrap;
+}
+.deposit-check-row input { width: 20px; height: 20px; margin: 0; }
+.deposit-check-text { flex: 1; }
+.deposit-check-meta { color: #2f855a; font-size: 0.85rem; font-weight: 600; }
+
+.deposit-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.deposit-detail-section { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+.deposit-detail-section h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #4a5568;
+  background: #f7fafc;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+.deposit-detail-section h3 span { color: #2d3748; }
+
+.deposit-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border-top: 1px solid #edf2f7;
+}
+.deposit-item:first-child { border-top: none; }
+.deposit-item.is-fixed { background: #faf5ff; }
+.deposit-item-date { font-size: 0.78rem; font-weight: 600; color: #718096; margin-bottom: 0.15rem; }
+.deposit-item-name { color: #2d3748; font-weight: 600; font-size: 0.92rem; }
+.deposit-item-amount { font-weight: 700; white-space: nowrap; }
+.deposit-empty { padding: 0.9rem; color: #a0aec0; font-size: 0.85rem; }
+
 /* ── モーダル ── */
 .modal-overlay {
   display: none;
@@ -533,6 +626,12 @@ td { padding: 0.8rem 1rem; vertical-align: middle; }
   .card-btn-edit:active { background: rgba(43,108,176,0.1); }
   .card-btn-del { color: #c53030; }
   .card-btn-del:active { background: rgba(197,48,48,0.15); }
+
+  .deposit-detail-grid { grid-template-columns: 1fr; }
+  .deposit-card { padding: 1rem; }
+  .deposit-card-total { font-size: 1.25rem; }
+  .deposit-base-row { flex-direction: column; align-items: stretch; gap: 0.4rem; }
+  .deposit-base-row input { max-width: none; }
 
   .fixed-cost-item { flex-direction: column; align-items: flex-start; gap: 0.4rem; }
   .fixed-cost-right { width: 100%; justify-content: space-between; }
