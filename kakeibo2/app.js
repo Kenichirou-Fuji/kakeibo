@@ -57,6 +57,9 @@ const DEPOSIT_PERSONS = ['ken', 'konami'];
 const DEFAULT_BASE_DEPOSIT = { ken: 180000, konami: 80000 };
 const META_DEPOSIT_SETTINGS_DOC = 'depositSettings';   // kakeibo2_meta/depositSettings { baseAmounts: {ken, konami} }
 const META_BUDGETS_DOC = 'budgets';                     // kakeibo2_meta/budgets { items: { "family|食費": 30000, ... } }
+const DEFAULT_INCOME = { ken: 450000, konami: 210000 }; // 毎月の収入（kakeibo2_meta/depositSettings.incomes で上書き）
+// 貯蓄とみなす固定費名（fixedCost.isSaving が未設定のときの既定）。収益（貯蓄除く）の計算で支出から外す
+const SAVING_ITEM_NAMES = ['ideco', 'NISA', '定期預金'];
 const BUDGET_WARN_RATIO = 0.8;                          // 上限のこの割合に達したら注意
 const DEPOSIT_STATUS_PREFIX = 'deposit-';               // kakeibo2_meta/deposit-YYYY-MM-<person>
 
@@ -65,6 +68,7 @@ let cachedEntries = [];
 let cachedFixedCosts = [];
 let cachedDepositStatus = {};     // key: `${month}-${person}` → doc
 let cachedBaseAmounts = { ...DEFAULT_BASE_DEPOSIT };
+let cachedIncomes = { ...DEFAULT_INCOME };
 let cachedBudgets = {};           // key: `${category}|${item}` → 月の上限（円）
 let editingBudget = null;         // { category, item }
 const depositState = { month: currentMonth() };
@@ -117,11 +121,13 @@ firebase.auth().onAuthStateChanged(user => {
     snapshot => {
       const status = {};
       let base = { ...DEFAULT_BASE_DEPOSIT };
+      let incomes = { ...DEFAULT_INCOME };
       let budgets = {};
       snapshot.docs.forEach(doc => {
         const data = doc.data();
         if (doc.id === META_DEPOSIT_SETTINGS_DOC) {
           base = { ...base, ...(data.baseAmounts || {}) };
+          incomes = { ...incomes, ...(data.incomes || {}) };
         } else if (doc.id === META_BUDGETS_DOC) {
           budgets = { ...(data.items || {}) };
         } else if (doc.id.startsWith(DEPOSIT_STATUS_PREFIX)) {
@@ -130,6 +136,7 @@ firebase.auth().onAuthStateChanged(user => {
       });
       cachedDepositStatus = status;
       cachedBaseAmounts = base;
+      cachedIncomes = incomes;
       cachedBudgets = budgets;
       renderView();
     },
@@ -323,6 +330,12 @@ function entriesForMonth(month) {
   return cachedEntries.filter(e => typeof e.date === 'string' && e.date.startsWith(month));
 }
 
+// 固定費が貯蓄かどうか（明示設定がなければ名前で判定）
+function isSavingFixedCost(fc) {
+  if (typeof fc.isSaving === 'boolean') return fc.isSaving;
+  return SAVING_ITEM_NAMES.includes(String(fc.name || '').trim());
+}
+
 // 固定費を「その月の1日の支出」として扱う
 function fixedCostsAsEntries(month) {
   return cachedFixedCosts.map(fc => ({
@@ -334,6 +347,7 @@ function fixedCostsAsEntries(month) {
     memo: '',
     wallet: fc.wallet || null,
     isFixedCost: true,
+    isSaving: isSavingFixedCost(fc),
   }));
 }
 
@@ -734,6 +748,7 @@ function renderFixedCosts() {
             <div class="fixed-cost-name">
               ${escapeHtml(fc.name)}
               ${fc.wallet ? `<span class="badge badge-wallet-${fc.wallet}">${WALLETS[fc.wallet] || fc.wallet}</span>` : ''}
+              ${isSavingFixedCost(fc) ? '<span class="badge badge-saving">貯蓄</span>' : ''}
             </div>
             <div class="fixed-cost-right">
               <div class="fixed-cost-amount">${formatCurrency(fc.amount)}</div>
@@ -762,6 +777,7 @@ function openFixedCostModal() {
   const category = viewState.category || 'family';
   document.getElementById('fixedCostCategory').value = category;
   document.getElementById('fixedCostWallet').value = DEFAULT_WALLET_FOR_CATEGORY[category];
+  document.getElementById('fixedCostIsSaving').checked = false;
   document.getElementById('fixedCostModalTitle').textContent = '＋ 固定費を追加';
   document.getElementById('fixedCostModal').classList.add('open');
 }
@@ -774,6 +790,7 @@ function openEditFixedCost(id) {
   document.getElementById('fixedCostAmount').value = fc.amount;
   document.getElementById('fixedCostCategory').value = fc.category || 'family';
   document.getElementById('fixedCostWallet').value = fc.wallet || DEFAULT_WALLET_FOR_CATEGORY[fc.category] || 'family';
+  document.getElementById('fixedCostIsSaving').checked = isSavingFixedCost(fc);
   document.getElementById('fixedCostModalTitle').textContent = '✏️ 固定費を編集';
   document.getElementById('fixedCostModal').classList.add('open');
 }
@@ -788,16 +805,17 @@ async function saveFixedCost() {
   const amount = parseInt(document.getElementById('fixedCostAmount').value, 10);
   const category = document.getElementById('fixedCostCategory').value;
   const wallet = document.getElementById('fixedCostWallet').value;
+  const isSaving = document.getElementById('fixedCostIsSaving').checked;
   if (!name || !Number.isFinite(amount)) { alert('固定費名と金額は必須です'); return; }
 
   try {
     if (editingFixedCostId) {
-      await db.collection(COL_FIXED).doc(editingFixedCostId).update({ name, amount, category, wallet });
+      await db.collection(COL_FIXED).doc(editingFixedCostId).update({ name, amount, category, wallet, isSaving });
       showToast('固定費を更新しました');
     } else {
       const maxOrder = cachedFixedCosts.reduce((m, fc) => Math.max(m, Number(fc.order) || 0), -1);
       await db.collection(COL_FIXED).add({
-        name, amount, category, wallet,
+        name, amount, category, wallet, isSaving,
         order: maxOrder + 1,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
@@ -915,6 +933,8 @@ function renderDeposit() {
   document.getElementById('depositTotal-all').textContent =
     formatCurrency(DEPOSIT_PERSONS.reduce((s, p) => s + results[p].total, 0));
 
+  renderHousehold(month);
+
   document.getElementById('depositCards').innerHTML = DEPOSIT_PERSONS.map(p => {
     const r = results[p];
     const name = CATEGORIES[p];
@@ -957,6 +977,82 @@ function renderDeposit() {
         </div>
       </div>`;
   }).join('');
+}
+
+// ── 世帯の収支（収入 − 支出） ──
+function calcHousehold(month) {
+  const list = combinedForMonth(month);
+  const income = DEPOSIT_PERSONS.reduce((s, p) => s + (Number(cachedIncomes[p]) || 0), 0);
+  const expense = sumAmount(list);
+  const saving = sumAmount(list.filter(e => e.isSaving));
+  return {
+    income,
+    expense,
+    saving,
+    profit: income - expense,
+    profitExSaving: income - (expense - saving),
+  };
+}
+
+function renderHousehold(month) {
+  const el = document.getElementById('householdCard');
+  if (!el) return;
+  const h = calcHousehold(month);
+  const sign = v => (v < 0 ? ' negative' : '');
+  el.innerHTML = `
+    <div class="household-header">
+      <span class="household-title">${formatMonthLabel(month)}の世帯収支</span>
+      <span class="household-profit${sign(h.profit)}">${formatCurrency(h.profit)}</span>
+    </div>
+    <div class="household-incomes">
+      ${DEPOSIT_PERSONS.map(p => `
+        <div class="household-income-row">
+          <label for="income-${p}"><span class="badge badge-${p}">${CATEGORIES[p]}</span> 収入（円/月）</label>
+          <input type="number" id="income-${p}" min="0" step="10000" inputmode="numeric"
+            value="${Number(cachedIncomes[p]) || 0}" onchange="onIncomeChange('${p}', this)" />
+        </div>`).join('')}
+    </div>
+    <div class="household-grid">
+      <div class="household-cell">
+        <div class="label">収入合計</div>
+        <div class="value">${formatCurrency(h.income)}</div>
+      </div>
+      <div class="household-cell">
+        <div class="label">支出合計（固定費込み）</div>
+        <div class="value expense">${formatCurrency(h.expense)}</div>
+      </div>
+      <div class="household-cell">
+        <div class="label">うち貯蓄</div>
+        <div class="value saving">${formatCurrency(h.saving)}</div>
+      </div>
+      <div class="household-cell main">
+        <div class="label">収益（収入 − 支出）</div>
+        <div class="value${sign(h.profit)}">${formatCurrency(h.profit)}</div>
+      </div>
+      <div class="household-cell main">
+        <div class="label">収益（貯蓄を除く）</div>
+        <div class="value${sign(h.profitExSaving)}">${formatCurrency(h.profitExSaving)}</div>
+      </div>
+    </div>
+    <p class="household-note">貯蓄＝固定費のうち「貯蓄」にした項目（既定: ideco・NISA・定期預金）。固定費の編集で変更できます。</p>`;
+}
+
+async function onIncomeChange(person, input) {
+  const value = parseInt(input.value, 10);
+  if (!Number.isFinite(value) || value < 0) {
+    input.value = cachedIncomes[person];
+    return;
+  }
+  try {
+    await db.collection(COL_META).doc(META_DEPOSIT_SETTINGS_DOC).set({
+      incomes: { [person]: value },
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    showToast(`${CATEGORIES[person]}の収入を保存しました`);
+  } catch (err) {
+    console.error(err);
+    showToast('⚠️ 収入の保存に失敗しました');
+  }
 }
 
 function renderDepositItems(items, emptyMessage) {

@@ -151,6 +151,9 @@
     計算式: 基本入金額 ＋ 家族財布で払った本人分 － 本人の財布で払った家族分
   </p>
 
+  <!-- 世帯の収支 -->
+  <div id="householdCard" class="household-card"></div>
+
   <div id="depositCards"></div>
 </div>
 
@@ -211,6 +214,12 @@
       <div class="form-group">
         <label for="fixedCostWallet">財布</label>
         <select id="fixedCostWallet"></select>
+      </div>
+      <div class="form-group full">
+        <label class="check-inline">
+          <input type="checkbox" id="fixedCostIsSaving" />
+          <span>貯蓄として扱う（収益「貯蓄を除く」の計算で支出から外す）</span>
+        </label>
       </div>
     </div>
     <div class="modal-actions">

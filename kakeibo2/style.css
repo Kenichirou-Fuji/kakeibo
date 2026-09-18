@@ -546,6 +546,39 @@ td { padding: 0.8rem 1rem; vertical-align: middle; }
 .deposit-item-amount { font-weight: 700; white-space: nowrap; }
 .deposit-empty { padding: 0.9rem; color: #a0aec0; font-size: 0.85rem; }
 
+/* ── 世帯の収支 ── */
+.badge-saving { background: #ccfbf1; color: #0f766e; }
+.check-inline { display: flex; align-items: center; gap: 0.6rem; font-weight: 500; cursor: pointer; }
+.check-inline input { width: 18px; height: 18px; margin: 0; }
+
+.household-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  border-top: 4px solid #0ea5a4;
+}
+.household-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.9rem; }
+.household-title { font-weight: 700; color: #4a5568; }
+.household-profit { font-size: 1.5rem; font-weight: 800; color: #0f766e; white-space: nowrap; }
+.household-profit.negative { color: #c53030; }
+
+.household-incomes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.9rem; }
+.household-income-row { display: flex; flex-direction: column; gap: 0.35rem; }
+.household-income-row label { display: flex; align-items: center; gap: 0.4rem; }
+
+.household-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+.household-cell { background: #f7fafc; border-radius: 10px; padding: 0.75rem 0.9rem; min-width: 0; }
+.household-cell .label { font-size: 0.75rem; color: #718096; margin-bottom: 0.3rem; }
+.household-cell .value { font-weight: 700; font-size: 1.05rem; color: #2d3748; white-space: nowrap; }
+.household-cell .value.expense { color: #e53e3e; }
+.household-cell .value.saving { color: #0f766e; }
+.household-cell.main { background: #f0fdfa; border: 1px solid #99f6e4; }
+.household-cell.main .value { color: #0f766e; font-size: 1.2rem; }
+.household-cell.main .value.negative { color: #c53030; }
+.household-note { color: #718096; font-size: 0.8rem; margin-top: 0.75rem; line-height: 1.6; }
+
 /* ── モーダル ── */
 .modal-overlay {
   display: none;
@@ -682,6 +715,11 @@ td { padding: 0.8rem 1rem; vertical-align: middle; }
 
   .deposit-detail-grid { grid-template-columns: 1fr; }
   .deposit-card { padding: 1rem; }
+  .household-card { padding: 1rem; }
+  .household-incomes { grid-template-columns: 1fr; }
+  .household-grid { grid-template-columns: 1fr 1fr; }
+  .household-cell.main { grid-column: 1 / -1; }
+  .household-profit { font-size: 1.25rem; }
   .deposit-card-total { font-size: 1.25rem; }
   .deposit-base-row { flex-direction: column; align-items: stretch; gap: 0.4rem; }
   .deposit-base-row input { max-width: none; }
